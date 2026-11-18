@@ -1,0 +1,61 @@
+{
+ "background": {
+  "persistent": false,
+  "scripts": [
+   "background.js"
+  ]
+ },
+ "browser_action": {
+  "default_icon": {
+   "48": "icons/icon48.png",
+   "96": "icons/icon96.png"
+  },
+  "default_title": "Element Blocker \u2014 pick an element to hide on this page"
+ },
+ "browser_specific_settings": {
+  "gecko": {
+   "id": "element-blocker-orion@local",
+   "strict_min_version": "57.0"
+  }
+ },
+ "content_scripts": [
+  {
+   "all_frames": false,
+   "js": [
+    "selector.js",
+    "rules.js",
+    "dissolve.js",
+    "wb.js",
+    "content.js"
+   ],
+   "match_about_blank": true,
+   "matches": [
+    "<all_urls>"
+   ],
+   "run_at": "document_start"
+  }
+ ],
+ "description": "Safari-style element blocker for Orion: tap the icon (or the in-page pill), tap an element, watch it dissolve, and it stays hidden on that site forever. Wider/narrower picker, particle dissolve, dynamic re-hide, session zap, scroll-unlock, a rules manager, and JSON backup.",
+ "icons": {
+  "48": "icons/icon48.png",
+  "96": "icons/icon96.png"
+ },
+ "manifest_version": 2,
+ "name": "Element Blocker for Orion",
+ "options_ui": {
+  "open_in_tab": true,
+  "page": "manager.html"
+ },
+ "permissions": [
+  "storage",
+  "tabs",
+  "webRequest",
+  "webRequestBlocking",
+  "<all_urls>"
+ ],
+ "version": "1.8.0",
+ "web_accessible_resources": [
+  "manager.html",
+  "page-hook.js"
+ ]
+}

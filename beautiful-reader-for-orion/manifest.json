@@ -1,0 +1,62 @@
+{
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "orion-beautiful-reader@local",
+      "strict_min_version": "57.0"
+    }
+  },
+  "content_scripts": [
+    {
+      "all_frames": false,
+      "js": [
+        "wallbreaker.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "all_frames": false,
+      "js": [
+        "reader-core.js",
+        "reader.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "description": "A beautiful reader for Orion with a built-in Wall Breaker (anti-adblock walls, dialogs and forced redirects are broken automatically): a draggable Reader pill appears on article pages and opens a calm, themed reader view with great typography. Toolbar popup for global settings and the always-use-Reader site list. Per-site auto-open, multi-page stitching, resume, contents, highlights with notes and Markdown export, per-site typography, and a save-for-later library.",
+  "icons": {
+    "48": "icons/icon48.png",
+    "96": "icons/icon96.png"
+  },
+  "manifest_version": 2,
+  "name": "Beautiful Reader for Orion",
+  "permissions": [
+    "storage",
+    "<all_urls>",
+    "tabs",
+    "webRequest",
+    "webRequestBlocking"
+  ],
+  "version": "1.16.2",
+  "browser_action": {
+    "default_title": "Beautiful Reader",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "48": "icons/icon48.png",
+      "96": "icons/icon96.png"
+    }
+  },
+  "background": {
+    "scripts": [
+      "br-background.js"
+    ]
+  },
+  "web_accessible_resources": [
+    "br-page-hook.js"
+  ]
+}

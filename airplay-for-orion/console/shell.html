@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AirPlay Console</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin:0; min-height:100vh; background:linear-gradient(180deg,#141828 0%,#0a0d18 55%,#070910 100%);
+    color:#f2f4f8; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",Arial,sans-serif;
+    padding:22px 16px 40px; }
+  .wrap { max-width:560px; margin:0 auto; }
+  .glass { background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.12);
+    border-radius:24px; padding:18px; backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    box-shadow:0 10px 32px rgba(0,0,0,.35); margin-bottom:14px; }
+  h1 { font-size:21px; margin:0; font-weight:750; }
+  .sub { font-size:12.5px; color:#9fb0c9; font-weight:600; }
+  .muted { font-size:12.5px; color:#8b93a5; line-height:1.5; }
+  .btn { appearance:none; border:1px solid rgba(255,255,255,.16); background:#0a84ff; color:#fff;
+    font:inherit; font-weight:650; border-radius:999px; padding:11px 16px; cursor:pointer; font-size:14.5px; }
+  .btn:disabled { opacity:.38; }
+  .ghost { background:rgba(255,255,255,.08); color:#f2f4f8; }
+  .danger { background:rgba(255,69,58,.16); color:#ff9d97; border-color:rgba(255,69,58,.35); }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  input[type=text] { width:100%; font:inherit; font-size:14.5px; color:#f2f4f8;
+    background:rgba(255,255,255,.09); border:1px solid rgba(255,255,255,.16); border-radius:12px;
+    padding:11px 12px; outline:none; }
+  input[type=text]::placeholder { color:#7d8494; }
+  video { width:100%; border-radius:16px; background:#000; display:block; }
+  iframe.player { width:100%; height:300px; border:0; border-radius:16px; background:#000; }
+  #log { font-family:ui-monospace,Menlo,monospace; font-size:10.5px; line-height:1.55; color:#8b93a5;
+    white-space:pre-wrap; word-break:break-all; max-height:150px; overflow-y:auto; margin:0; }
+  .code { font-size:40px; font-weight:800; letter-spacing:.22em; text-align:center; color:#ffd60a; margin:8px 0 2px; }
+  #qr { display:flex; justify-content:center; margin:12px 0 4px; }
+  .label { font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#7d8494; margin:0 0 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="row" style="margin-bottom:14px;">
+    <span id="dot" style="width:9px;height:9px;border-radius:50%;background:#8e8e93;display:inline-block;"></span>
+    <h1 style="flex:1;">AirPlay Console</h1>
+    <span class="sub" id="status">Not paired</span>
+  </div>
+
+  <!-- HOME -->
+  <div class="glass" id="card-home">
+    <p class="label">This device</p>
+    <input type="text" id="device-name" maxlength="24" autocomplete="off">
+    <div style="height:12px"></div>
+    <div class="row">
+      <button class="btn" id="start-host" style="flex:1;">Start pairing — show a QR</button>
+    </div>
+    <div id="resume-row" style="display:none;margin-top:10px;">
+      <div class="row">
+        <span class="muted" id="resume-label" style="flex:1;"></span>
+        <button class="btn ghost" id="resume-host">Reconnect</button>
+      </div>
+    </div>
+    <div style="height:14px"></div>
+    <p class="label">Join a pairing</p>
+    <input type="text" id="join-input" placeholder="Paste pairing link or room code" autocomplete="off" autocapitalize="characters">
+    <div style="height:8px"></div>
+    <div class="row">
+      <button class="btn ghost" id="join-btn" style="flex:1;">Join as the other device →</button>
+      <button class="btn danger" id="forget-home">Forget</button>
+    </div>
+    <p class="muted" style="margin:12px 0 0;">No extension, no account, nothing to install — this page is the
+    whole interface. Pairing works between two copies of this page, or this page and the Orion extension.</p>
+  </div>
+
+  <!-- PAIRING -->
+  <div class="glass" id="card-pair" style="display:none;">
+    <div style="font-size:16.5px;font-weight:700;" id="pair-title">Pair a device</div>
+    <p class="muted" id="pair-sub" style="margin:6px 0 0;"></p>
+    <div id="qr"></div>
+    <div class="muted" id="pair-link" style="word-break:break-all;text-align:center;"></div>
+    <div id="pair-code-row" style="display:none;">
+      <div class="code" id="pair-code">------</div>
+      <p class="muted" style="text-align:center;margin:0 0 10px;">Only continue if the other screen shows the same code.</p>
+      <div class="row"><button class="btn" id="pair-confirm" style="flex:1;">It matches — Pair</button></div>
+    </div>
+    <div class="row" style="margin-top:12px;">
+      <button class="btn ghost" id="pair-cancel" style="flex:1;">Cancel</button>
+    </div>
+  </div>
+
+  <!-- PAIRED -->
+  <div class="glass" id="card-main" style="display:none;">
+    <p class="sub" id="main-sub" style="margin:0 0 10px;"></p>
+    <p class="label">Playing here</p>
+    <div id="player-idle" class="muted" style="padding:14px;border:1px dashed rgba(255,255,255,.18);border-radius:16px;text-align:center;">
+      Nothing yet — when the other device sends something, it plays here.
+    </div>
+    <video id="player-video" style="display:none;" controls playsinline></video>
+    <iframe id="player-frame" class="player" style="display:none;" sandbox="allow-scripts allow-same-origin allow-presentation" allowfullscreen></iframe>
+    <div class="row" style="margin-top:8px;">
+      <span class="muted" id="now-playing" style="flex:1;"></span>
+      <button class="btn ghost" id="player-fs">Fullscreen</button>
+    </div>
+    <div style="height:14px"></div>
+    <p class="label">Send to the other device</p>
+    <div class="row">
+      <input type="text" id="cast-url" placeholder="Paste a video or page link" style="flex:1;min-width:180px;" autocomplete="off">
+      <button class="btn" id="cast-send">Cast link</button>
+    </div>
+    <div class="row" style="margin-top:8px;">
+      <button class="btn ghost" id="share-camera">Share camera</button>
+      <button class="btn ghost" id="share-screen">Share screen / tab</button>
+      <button class="btn ghost" id="share-file-btn">Share a video file</button>
+      <button class="btn danger" id="stop-share" style="display:none;">Stop sharing</button>
+      <input type="file" id="share-file" accept="video/*" style="display:none;">
+    </div>
+    <video id="preview" style="display:none;margin-top:10px;" muted playsinline></video>
+    <div id="remote-ctl" style="display:none;margin-top:14px;">
+      <p class="label">Remote control</p>
+      <div class="muted" id="remote-label" style="margin-bottom:8px;"></div>
+      <div class="row">
+        <button class="btn ghost" id="remote-toggle">▶ Play</button>
+        <button class="btn ghost" id="remote-back">−10s</button>
+        <button class="btn ghost" id="remote-fwd">+10s</button>
+        <button class="btn ghost" id="remote-fs">Fullscreen</button>
+      </div>
+    </div>
+    <div class="row" style="margin-top:14px;">
+      <button class="btn danger" id="disconnect" style="flex:1;">Disconnect &amp; forget pairing</button>
+    </div>
+  </div>
+
+  <div class="glass">
+    <p class="label">This browser can</p>
+    <pre class="muted" id="caps" style="margin:0;white-space:pre-wrap;"></pre>
+    <p class="label" style="margin-top:12px;">Connection log</p>
+    <pre id="log"></pre>
+  </div>
+  <p class="muted" style="text-align:center;">Keep this tab open — it is the connection. Media travels directly
+  between the two devices; the broker only introduces them.</p>
+</div>
+</body>
+</html>

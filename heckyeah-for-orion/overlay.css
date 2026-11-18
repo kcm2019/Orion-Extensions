@@ -1,0 +1,122 @@
+/* HeckYeah for Orion — overlay styles (fmhy.net only). Liquid glass. */
+#hyo-overlay {
+  position: fixed; inset: 0; z-index: 2147483000;
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  background: #07080e;
+  color: #f2f4f8;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+  padding: 0 16px 40px;
+  box-sizing: border-box;
+}
+#hyo-overlay::before {
+  content: ''; position: fixed; inset: -12%; pointer-events: none;
+  background:
+    radial-gradient(620px 420px at 12% -4%, rgba(10,132,255,0.30), transparent 62%),
+    radial-gradient(720px 520px at 92% 16%, rgba(124,82,255,0.22), transparent 62%),
+    radial-gradient(820px 620px at 50% 112%, rgba(0,199,190,0.13), transparent 62%);
+  filter: blur(12px);
+}
+#hyo-overlay * { box-sizing: border-box; }
+#hyo-overlay > * { position: relative; z-index: 1; }
+#hyo-overlay .hyo-head {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; justify-content: space-between;
+  margin: 0 -16px 6px; padding: 14px 16px;
+  background: rgba(9, 11, 19, 0.52);
+  backdrop-filter: blur(22px) saturate(170%); -webkit-backdrop-filter: blur(22px) saturate(170%);
+  border-bottom: 1px solid rgba(255,255,255,0.09);
+}
+#hyo-overlay .hyo-brand { font-size: 25px; font-weight: 800; letter-spacing: -0.02em; }
+#hyo-overlay .hyo-brand span { color: #0a84ff; }
+#hyo-overlay .hyo-webbtn {
+  background: rgba(255,255,255,0.10); color: #fff; border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 999px; padding: 8px 15px; font-size: 14px; font-weight: 500; cursor: pointer;
+  backdrop-filter: blur(16px) saturate(160%); -webkit-backdrop-filter: blur(16px) saturate(160%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.14);
+}
+#hyo-overlay .hyo-section {
+  font-size: 24px; font-weight: 800; letter-spacing: -0.015em; margin: 30px 2px 2px;
+}
+#hyo-overlay .hyo-shelf-title {
+  font-size: 16px; font-weight: 600; color: #c9d5ea; margin: 16px 2px 9px;
+}
+#hyo-overlay .hyo-row {
+  display: flex; gap: 12px; overflow-x: auto; padding: 4px 2px 10px;
+  -webkit-overflow-scrolling: touch; scrollbar-width: none;
+}
+#hyo-overlay .hyo-row::-webkit-scrollbar { display: none; }
+#hyo-overlay .hyo-card {
+  flex: 0 0 auto; width: 218px; max-width: 72vw;
+  background: linear-gradient(155deg, rgba(255,255,255,0.11), rgba(255,255,255,0.045));
+  border: 1px solid rgba(255,255,255,0.14); border-radius: 20px; padding: 13px 14px; cursor: pointer;
+  backdrop-filter: blur(18px) saturate(160%); -webkit-backdrop-filter: blur(18px) saturate(160%);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.13);
+}
+#hyo-overlay .hyo-card:active { background: linear-gradient(155deg, rgba(255,255,255,0.16), rgba(255,255,255,0.07)); }
+#hyo-overlay .hyo-card .hyo-t { font-size: 15px; font-weight: 650; line-height: 1.3; }
+#hyo-overlay .hyo-card .hyo-sub { font-size: 12.5px; color: #9fb0c9; margin-top: 4px; line-height: 1.35; }
+#hyo-overlay .hyo-card .hyo-ts { font-size: 12.5px; color: #d7deeb; margin-top: 7px; font-variant-numeric: tabular-nums; }
+#hyo-overlay .hyo-bar { height: 4px; border-radius: 2px; background: rgba(255,255,255,0.16); margin-top: 7px; overflow: hidden; }
+#hyo-overlay .hyo-bar i { display: block; height: 100%; background: #0a84ff; border-radius: 2px; }
+#hyo-overlay .hyo-badge {
+  display: inline-block; font-size: 11px; font-weight: 600; color: #fff; background: #0a84ff;
+  border-radius: 999px; padding: 2px 8px; margin-top: 7px;
+}
+#hyo-overlay .hyo-eps { margin: 2px 0 8px; }
+#hyo-overlay .hyo-ep {
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(255,255,255,0.055); border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 14px; padding: 10px 12px; margin: 6px 2px;
+  backdrop-filter: blur(14px) saturate(150%); -webkit-backdrop-filter: blur(14px) saturate(150%);
+}
+#hyo-overlay .hyo-ep a { color: #f2f4f8; text-decoration: none; flex: 1; min-width: 0; }
+#hyo-overlay .hyo-ep .hyo-t { font-size: 14px; font-weight: 600; }
+#hyo-overlay .hyo-ep .hyo-ts { font-size: 12px; color: #9fb0c9; font-variant-numeric: tabular-nums; }
+#hyo-overlay .hyo-x {
+  background: rgba(255,255,255,0.10); color: #fff; border: none; border-radius: 50%;
+  width: 28px; height: 28px; font-size: 13px; cursor: pointer; flex: 0 0 auto;
+}
+#hyo-overlay .hyo-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px;
+}
+#hyo-overlay .hyo-cat {
+  display: block; text-decoration: none; color: #f2f4f8;
+  background: linear-gradient(150deg, rgba(10,132,255,0.24), rgba(255,255,255,0.05));
+  border: 1px solid rgba(255,255,255,0.14); border-radius: 20px; padding: 17px 15px; min-height: 98px;
+  backdrop-filter: blur(18px) saturate(160%); -webkit-backdrop-filter: blur(18px) saturate(160%);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.13);
+}
+#hyo-overlay .hyo-cat .hyo-t { font-size: 16.5px; font-weight: 700; }
+#hyo-overlay .hyo-cat .hyo-sub { font-size: 12.5px; color: #9fb0c9; margin-top: 5px; line-height: 1.4; }
+#hyo-overlay .hyo-tile {
+  flex: 0 0 auto; width: 196px; max-width: 68vw; text-decoration: none; color: #f2f4f8;
+  background: linear-gradient(155deg, rgba(255,255,255,0.10), rgba(255,255,255,0.04));
+  border: 1px solid rgba(255,255,255,0.13); border-radius: 18px; padding: 12px 13px;
+  backdrop-filter: blur(18px) saturate(160%); -webkit-backdrop-filter: blur(18px) saturate(160%);
+  box-shadow: 0 10px 26px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.12);
+}
+#hyo-overlay .hyo-tile .hyo-t { font-size: 14.5px; font-weight: 650; }
+#hyo-overlay .hyo-tile .hyo-d {
+  font-size: 12.5px; color: #9fb0c9; margin-top: 5px; line-height: 1.45;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+#hyo-overlay .hyo-more {
+  flex: 0 0 auto; width: 92px; display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.05); border: 1px dashed rgba(255,255,255,0.24);
+  border-radius: 18px; color: #cfe3ff; font-size: 13px; cursor: pointer;
+}
+#hyo-overlay .hyo-clear {
+  flex: 0 0 auto; width: 92px; display: flex; align-items: center; justify-content: center;
+  background: rgba(255,59,48,0.14); border: 1px solid rgba(255,59,48,0.35);
+  border-radius: 20px; color: #ffb3ae; font-size: 13.5px; cursor: pointer;
+}
+#hyo-overlay .hyo-diag { margin-top: 26px; font-size: 11px; color: #66707f; text-align: center; }
+#hyo-pill {
+  position: fixed; right: 14px; bottom: 18px; z-index: 2147483001;
+  background: rgba(22,26,42,0.55); color: #fff; border: 1px solid rgba(255,255,255,0.22);
+  border-radius: 999px; padding: 11px 17px; font-size: 14px; font-weight: 550; cursor: pointer;
+  backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: 0 10px 28px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.16);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", Arial, sans-serif;
+  touch-action: none; -webkit-user-select: none; user-select: none;
+}

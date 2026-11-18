@@ -1,0 +1,268 @@
+/* YT Native Fullscreen for Orion — Apple-style reskin of YouTube's
+ * inline player (v1.3.0).
+ *
+ * HARD RULE for this file: paint only. No display:none, no
+ * visibility:hidden, no opacity:0, no pointer-events changes, no
+ * layout removal. Every YouTube button, slider, menu and function
+ * stays exactly where YouTube put it and keeps working — only its
+ * appearance changes: liquid-glass scrims, SF typography, white
+ * AVPlayer-style progress, iOS menus and switches, and Kurt's
+ * default accent, system blue #0A84FF.
+ *
+ * YouTube's own classes are stable enough for this (.ytp-*), but
+ * any rule that stops matching degrades to stock YouTube — never
+ * to a broken player.
+ */
+
+/* ---------- typography: system font everywhere in the player ---------- */
+.html5-video-player {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- chrome scrims: soft glass instead of YouTube's gradients ---------- */
+.ytp-gradient-bottom {
+  background: linear-gradient(to top,
+    rgba(0, 0, 0, 0.55) 0%,
+    rgba(0, 0, 0, 0.28) 55%,
+    rgba(0, 0, 0, 0) 100%) !important;
+  height: 72px !important;
+}
+.ytp-gradient-top {
+  background: linear-gradient(to bottom,
+    rgba(0, 0, 0, 0.45) 0%,
+    rgba(0, 0, 0, 0) 100%) !important;
+}
+
+.ytp-chrome-bottom {
+  background: rgba(28, 28, 30, 0.32);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
+  backdrop-filter: blur(18px) saturate(180%);
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 0 0 12px 12px;
+}
+.html5-video-player {
+  border-radius: 12px;
+}
+
+/* ---------- title / top bar ---------- */
+.ytp-title {
+  font-weight: 600 !important;
+  letter-spacing: -0.01em;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
+}
+
+/* ---------- buttons: quiet, round, glass on hover/press ---------- */
+.ytp-button {
+  border-radius: 999px !important;
+  transition: background-color 0.18s ease, transform 0.12s ease,
+    opacity 0.18s ease;
+}
+.ytp-button:hover {
+  background: rgba(255, 255, 255, 0.14) !important;
+}
+.ytp-button:active {
+  background: rgba(255, 255, 255, 0.22) !important;
+  transform: scale(0.92);
+}
+.ytp-button:focus-visible {
+  outline: 2px solid #0A84FF;
+  outline-offset: 1px;
+}
+/* YouTube draws many icons as inline SVG paths in white — keep them,
+   just soften the pure-white glare slightly. */
+.ytp-button svg {
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.35));
+}
+
+/* ---------- time readout: tabular SF numerals, AVPlayer-style "1:23 / 10:45" ---------- */
+.ytp-time-display {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  opacity: 0.92;
+}
+
+/* ---------- progress bar: AVPlayer white, taller target, glass track ---------- */
+.ytp-progress-bar-container {
+  height: 16px !important; /* Apple-sized touch target */
+}
+.ytp-progress-bar {
+  height: 4px !important;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.28) !important;
+  overflow: visible;
+}
+.ytp-played {
+  background: #FFFFFF !important;
+  border-radius: 999px;
+}
+.ytp-load-progress {
+  background: rgba(255, 255, 255, 0.38) !important;
+  border-radius: 999px;
+}
+.ytp-hover-progress {
+  background: rgba(255, 255, 255, 0.22) !important;
+  border-radius: 999px;
+}
+.ytp-ad-progress, .ytp-iv-progress {
+  background: rgba(255, 255, 255, 0.55) !important;
+}
+.ytp-scrubber-button {
+  width: 13px !important;
+  height: 13px !important;
+  border-radius: 50% !important;
+  background: #FFFFFF !important;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.5);
+  transition: transform 0.15s ease;
+}
+.ytp-progress-bar-container:hover .ytp-scrubber-button,
+.ytp-progress-bar-container:active .ytp-scrubber-button {
+  transform: scale(1.25);
+}
+/* Chapter markers keep their shape, softened to glass dots */
+.ytp-chapter-hover-container, .ytp-progress-list {
+  border-radius: 999px;
+}
+
+/* ---------- volume slider: white pill ---------- */
+.ytp-volume-slider-track {
+  background: rgba(255, 255, 255, 0.28) !important;
+  border-radius: 999px;
+}
+.ytp-volume-slider-foreground {
+  background: #FFFFFF !important;
+  border-radius: 999px;
+}
+.ytp-volume-slider-handle {
+  background: #FFFFFF !important;
+  border-radius: 50% !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+
+/* ---------- CC state underline: YouTube red -> system blue ---------- */
+.ytp-subtitles-button[aria-pressed="true"]::after,
+.ytp-subtitles-button.ytp-subtitles-on::after {
+  background: #0A84FF !important;
+  border-radius: 999px;
+  height: 3px !important;
+}
+
+/* ---------- menus & panels (settings, captions, share): iOS sheets ---------- */
+.ytp-panel, .ytp-settings-menu, .ytp-panel-menu {
+  background: rgba(30, 30, 32, 0.45) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(200%);
+  backdrop-filter: blur(28px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px !important;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+.ytp-menuitem {
+  border-radius: 8px;
+  margin: 2px 6px;
+  transition: background-color 0.15s ease;
+}
+.ytp-menuitem:hover {
+  background: rgba(255, 255, 255, 0.10) !important;
+}
+.ytp-menuitem[aria-checked="true"] {
+  color: #FFFFFF !important;
+}
+/* Check marks / selected accents in blue */
+.ytp-menuitem[aria-checked="true"] .ytp-menuitem-icon svg,
+.ytp-menuitem[aria-checked="true"] svg {
+  fill: #0A84FF !important;
+}
+.ytp-panel-header {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+/* ---------- settings toggles: iOS switches ---------- */
+.ytp-menuitem-toggle-checkbox {
+  background: rgba(255, 255, 255, 0.28) !important;
+  border-radius: 999px !important;
+  transition: background-color 0.2s ease;
+}
+.ytp-menuitem[aria-checked="true"] .ytp-menuitem-toggle-checkbox,
+.ytp-menuitem-toggle-checkbox.ytp-menuitem-toggle-checkbox-checked {
+  background: #0A84FF !important;
+}
+
+/* ---------- tooltips: glass pills ---------- */
+.ytp-tooltip.ytp-bottom, .ytp-tooltip.ytp-top {
+  background: rgba(30, 30, 32, 0.5) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px !important;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  font-weight: 500;
+}
+.ytp-tooltip-text {
+  background: transparent !important;
+}
+
+/* ---------- centre bezel + big play: dark glass disc, no YouTube red ---------- */
+.ytp-bezel {
+  background: rgba(28, 28, 30, 0.55) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  backdrop-filter: blur(12px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 50% !important;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+}
+.ytp-large-play-button {
+  border-radius: 50% !important;
+  transition: transform 0.15s ease, opacity 0.2s ease;
+}
+.ytp-large-play-button svg {
+  fill: rgba(28, 28, 30, 0.82) !important;
+  filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.45));
+}
+.ytp-large-play-button:hover {
+  transform: scale(1.05);
+}
+
+/* ---------- spinner: iOS-style thin ring ---------- */
+.ytp-spinner-circle {
+  border-color: rgba(255, 255, 255, 0.9) rgba(255, 255, 255, 0.25)
+    rgba(255, 255, 255, 0.25) rgba(255, 255, 255, 0.25) !important;
+}
+
+/* ---------- captions text: SF, soft glass behind the words ---------- */
+.ytp-caption-segment {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Helvetica Neue", Arial, sans-serif !important;
+  font-weight: 500;
+  background: rgba(0, 0, 0, 0.55) !important;
+  border-radius: 4px;
+  padding: 0 4px;
+  text-shadow: none !important;
+}
+.caption-window {
+  border-radius: 8px;
+}
+
+/* ---------- cards that float over the player (endscreen / suggestions) ---------- */
+.ytp-ce-element {
+  border-radius: 12px !important;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+}
+.ytp-endscreen-content, .ytp-videowall-still {
+  border-radius: 12px;
+}
+.ytp-pause-overlay .ytp-button {
+  background: rgba(28, 28, 30, 0.6) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  backdrop-filter: blur(14px) saturate(160%);
+}
+
+/* ---------- our own settings bar gets the same glass (inline styles
+   in content.js do the heavy lifting; these are the fallbacks) --- */
+#ytnf-bar button {
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  backdrop-filter: blur(16px) saturate(180%);
+}

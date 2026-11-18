@@ -1,0 +1,18 @@
+const assert = require('assert');
+const R = require('../resources.js');
+assert.strictEqual(R.resolveKey('noopjs', 'script'), 'noopjs');
+assert.strictEqual(R.resolveKey('fuckadblock.js-3.2.0', 'script'), 'fuckadblock');
+assert.strictEqual(R.resolveKey('google-ima.js', 'script'), 'google-ima');
+assert.strictEqual(R.resolveKey('adsbygoogle.js', 'script'), 'adsbygoogle');
+assert.strictEqual(R.resolveKey('noopvast-3.0', 'xhr'), 'noopvast');
+assert.strictEqual(R.resolveKey('empty', 'script'), 'noopjs');
+assert.strictEqual(R.resolveKey('empty', 'stylesheet'), 'noopcss');
+assert.strictEqual(R.resolveKey('noopmp4-1s', 'media'), null, 'unsupported resource resolves null');
+const fab = R.stubFor('fuckadblock.js-3.2.0', 'script');
+assert.ok(fab.text.includes('FuckAdBlock') && fab.text.includes('onNotDetected'), 'fuckadblock stub has API');
+assert.ok(new Function(fab.text.replace('(function(window){','(function(window){').replace('})(window);','})(typeof window!=="undefined"?window:{});')) !== null, 'fuckadblock stub parses');
+new Function(R.stubFor('google-ima', 'script').text);
+new Function(R.stubFor('adsbygoogle', 'script').text);
+const du = R.dataUrl('noopjs', 'script');
+assert.ok(du.startsWith('data:text/javascript'), 'data url built');
+console.log('resources tests: ALL PASS');

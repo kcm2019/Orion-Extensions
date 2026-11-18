@@ -1,0 +1,25 @@
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; padding: 16px; background: #141417; color: #f2f2f7;
+  font: 15px/1.45 -apple-system, system-ui, sans-serif; max-width: 960px; margin-inline: auto; }
+header h1 { font-size: 22px; margin: 4px 0 8px; }
+.status { color: #aeaeb8; font-size: 13px; margin: 6px 0; white-space: pre-wrap; }
+.hint { color: #aeaeb8; font-size: 13px; }
+nav#tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0; }
+nav#tabs button { background: rgba(255,255,255,.1); color: #fff; border: 0; border-radius: 999px; padding: 7px 13px; font-size: 14px; }
+nav#tabs button.active { background: #0a84ff; }
+button { background: #0a84ff; color: #fff; border: 0; border-radius: 8px; padding: 7px 12px; font-size: 14px; cursor: pointer; }
+button.danger { background: #b03a2e; }
+button.small { padding: 4px 8px; font-size: 12px; background: rgba(255,255,255,.16); }
+.bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 10px 0; }
+input, textarea { background: #232329; color: #fff; border: 1px solid rgba(255,255,255,.18); border-radius: 8px; padding: 7px 9px; font-size: 14px; }
+textarea { width: 100%; font-family: ui-monospace, monospace; font-size: 13px; }
+input[type=checkbox] { width: 19px; height: 19px; accent-color: #0a84ff; vertical-align: -4px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 7px 6px; border-bottom: 1px solid rgba(255,255,255,.1); vertical-align: top; }
+td.url, .diag { word-break: break-all; }
+.diag { background: #232329; border-radius: 10px; padding: 12px; font-size: 13.5px; line-height: 1.6; }
+.diag b.ok { color: #4cd964; } .diag b.bad { color: #ff6961; } .diag b.mid { color: #ffd60a; }
+.file-label { background: rgba(255,255,255,.14); border-radius: 8px; padding: 7px 12px; cursor: pointer; }
+.file-label input { display: none; }
+code { background: rgba(255,255,255,.12); padding: 0 4px; border-radius: 4px; }

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>uBlock for Orion — Dashboard</title>
+<link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+<header>
+  <h1>🛡️ uBlock for Orion</h1>
+  <label class="switch-row"><input type="checkbox" id="globalEnabled"> Blocking enabled</label>
+  <div id="statusLine" class="status">Loading…</div>
+</header>
+
+<nav id="tabs">
+  <button data-tab="lists" class="active">Filter lists</button>
+  <button data-tab="filters">My filters</button>
+  <button data-tab="logger">Logger</button>
+  <button data-tab="switches">Per-site switches</button>
+  <button data-tab="diag">Diagnostics</button>
+  <button data-tab="backup">Backup</button>
+</nav>
+
+<section id="tab-lists">
+  <div class="bar">
+    <label><input type="checkbox" id="autoUpdate"> Auto-update filter lists</label>
+    <label>every <input type="number" id="updateHours" min="1" max="168" style="width:4em"> hours (list <i>Expires</i> wins when present)</label>
+    <button id="updateNow">Update now</button>
+    <button id="purge" class="danger">Purge all caches</button>
+  </div>
+  <div id="updateStatus" class="status"></div>
+  <p class="hint">K anti-detect pack (v1.1): <code>$redirect</code> rules serve inert stubs (noop, FuckAdBlock, adsbygoogle, Google IMA) instead of cancelling, and the <b>Adblock Warning Removal List</b> below hides most "disable your ad blocker" walls. Toggle it off here if a site misbehaves.</p>
+  <table id="listTable">
+    <thead><tr><th></th><th>List</th><th>Updated</th><th>Rules</th><th></th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <h3>Add a custom list (H)</h3>
+  <div class="bar">
+    <input id="customName" placeholder="Name" size="18">
+    <input id="customUrl" placeholder="https://…/list.txt" size="42">
+    <button id="addCustom">Add &amp; fetch</button>
+  </div>
+</section>
+
+<section id="tab-filters" hidden>
+  <label><input type="checkbox" id="myFiltersEnabled"> Enable my filters</label>
+  <p class="hint">Same syntax as uBlock Origin: network filters, <code>##</code> cosmetics, <code>##+js(...)</code> scriptlets. One per line.</p>
+  <textarea id="myFilters" rows="16" spellcheck="false" placeholder="||example.com/ads/*&#10;example.com##.banner&#10;||tracker.example^$third-party"></textarea>
+  <div class="bar"><button id="saveFilters">Save &amp; apply</button><span id="filtersStatus" class="status"></span></div>
+</section>
+
+<section id="tab-logger" hidden>
+  <div class="bar">
+    <input id="logFilter" placeholder="Filter (host, layer, text)…" size="32">
+    <button id="logRefresh">Refresh</button>
+    <button id="logClear" class="danger">Clear log</button>
+  </div>
+  <p class="hint">Layer tells you what actually blocked it: <b>webRequest</b> = Orion's network API (the one broken for real uBO), <b>fallback</b> = this extension's page-world hooks, <b>content</b> = cosmetics/elements, <b>scriptlet</b>, <b>switch</b>, <b>youtube</b>.</p>
+  <table id="logTable">
+    <thead><tr><th>Time</th><th>Layer</th><th>Action</th><th>Site</th><th>Detail</th><th>URL</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</section>
+
+<section id="tab-switches" hidden>
+  <p class="hint">Per-site switches (C), same idea as uBlock Origin's: <b>no popups</b>, <b>no large media</b> (&gt;50 KB at the network layer, click-to-play in the fallback), <b>no remote fonts</b>, <b>disable JavaScript</b>. Set them here or from the shield pill on any page. Entries match subdomains.</p>
+  <table id="siteTable">
+    <thead><tr><th>Site</th><th>Site off</th><th>No popups</th><th>No large media</th><th>No remote fonts</th><th>No JS</th><th></th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <div class="bar">
+    <input id="siteHost" placeholder="example.com" size="24">
+    <button id="addSite">Add site</button>
+  </div>
+</section>
+
+<section id="tab-diag" hidden>
+  <h3>Which layers are alive on this Orion?</h3>
+  <div id="diagBody" class="diag">Loading…</div>
+  <div class="bar">
+    <button id="probeBtn">Run webRequest probe</button>
+    <button id="diagRefresh">Refresh diagnostics</button>
+  </div>
+  <p class="hint">Probe: opens Google's ad script (<code>pagead2.googlesyndication.com/pagead/js/adsbygoogle.js</code>, covered by EasyList) in a new tab. If Orion's webRequest layer works, the tab fails to load it and the Logger gains a <b>webRequest / blocked</b> entry. If the script loads and displays, webRequest is dead on this build and the <b>fallback</b> layer is your real protection — it cannot stop parser-loaded scripts/images, only fetch/XHR/beacon/WebSocket traffic, elements it catches in time, and everything cosmetics + scriptlets cover.</p>
+</section>
+
+<section id="tab-backup" hidden>
+  <h3>Backup / restore (H)</h3>
+  <p class="hint">Exports settings, per-site switches, My Filters and custom list subscriptions as one JSON file. Filter lists themselves are not included — they re-download from their source URLs.</p>
+  <div class="bar">
+    <button id="exportBtn">Export backup</button>
+    <label class="file-label">Import backup <input type="file" id="importFile" accept=".json,application/json"></label>
+  </div>
+  <div id="backupStatus" class="status"></div>
+</section>
+
+<script src="engine.js"></script>
+<script src="storage.js"></script>
+<script src="updater.js"></script>
+<script src="dashboard.js"></script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+const fs = require('fs');
+const { JSDOM } = require('/tmp/brtest/node_modules/jsdom');
+const wsj = fs.readFileSync('/tmp/brtest/e2e-wsj.js', 'utf8');
+const _pre = wsj.split('let _r')[0]; const html = new Function(_pre.slice(_pre.indexOf('const DEK')) + '; return html;')();
+let _r = fs.readFileSync('/home/hatch/workspace/orion-beautiful-reader/reader.js', 'utf8');
+const _i = _r.lastIndexOf('})();');
+const reader = _r.slice(0, _i) + 'window.__BR = S; ' + _r.slice(_i);
+const dom = new JSDOM(html, { url: 'https://www.wsj.com/x', pretendToBeVisual: true, runScripts: 'outside-only' });
+const w = dom.window;
+w.fetch = () => Promise.reject(new Error('offline'));
+w.eval(fs.readFileSync('/home/hatch/workspace/orion-beautiful-reader/reader-core.js', 'utf8'));
+w.eval(reader);
+setTimeout(() => {
+  const doc = w.document;
+  const pill = doc.getElementById('br-pill');
+  const ev = (t) => { const e = new w.MouseEvent(t, { bubbles: true }); e.clientX = 10; e.clientY = 10; return e; };
+  pill.dispatchEvent(ev('pointerdown')); pill.dispatchEvent(ev('pointerup'));
+  setTimeout(() => {
+    const gear = doc.querySelector('[data-act="aa"]');
+    gear.dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    setTimeout(() => {
+      let fail = 0;
+      const chk = (n, ok) => { console.log((ok ? 'PASS' : 'FAIL') + ' ' + n); if (!ok) fail++; };
+      const heads = Array.from(doc.querySelectorAll('.br-sec-head'));
+      chk('5 category headers', heads.length === 5);
+      chk('labels', heads.map(h => h.textContent.replace(/[⌄›]/g, '').trim()).join(',') === 'This Site,Appearance,Text,Layout,Listen & Scroll');
+      const bodies = Array.from(doc.querySelectorAll('.br-sec-body'));
+      chk('site expanded by default', bodies[0] && !bodies[0].classList.contains('br-collapsed'));
+      chk('appearance expanded by default', bodies[1] && !bodies[1].classList.contains('br-collapsed'));
+      chk('text collapsed by default', bodies[2] && bodies[2].classList.contains('br-collapsed'));
+      chk('theme rows inside appearance', !!bodies[1].querySelector('[data-mrow^="theme:"]'));
+      chk('font rows inside text', !!bodies[2].querySelector('[data-mrow^="font:"]'));
+      chk('menu bar rows inside layout', !!bodies[3].querySelector('[data-mrow^="bar:"]'));
+      chk('bar bottom selected', !!bodies[3].querySelector('[data-mrow="bar:bottom"]'));
+      heads[2].dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+      chk('tap expands text', !bodies[2].classList.contains('br-collapsed'));
+      heads[2].dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+      chk('tap again collapses text', bodies[2].classList.contains('br-collapsed'));
+      chk('listen section exists with rate rows', !!bodies[4] && !!bodies[4].querySelector('[data-mrow^="ttsRate:"]'));
+      const cssTxt = (doc.getElementById('br-style') || {}).textContent || '';
+      chk('sections animate via grid rows', /\.br-sec-body\.br-anim\{transition:grid-template-rows/.test(cssTxt));
+      chk('chevron is one rotating glyph', heads.every(h => { const c = h.querySelector('.br-sec-chev'); return c && c.textContent === '›'; }));
+      process.exit(fail ? 1 : 0);
+    }, 500);
+  }, 600);
+}, 3000);

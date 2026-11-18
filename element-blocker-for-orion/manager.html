@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Element Blocker — Rules</title>
+<link rel="stylesheet" href="manager.css">
+</head>
+<body>
+<header>
+  <h1>✦ Element Blocker</h1>
+  <p id="summary">Loading…</p>
+  <div class="toolbar">
+    <button id="exportBtn">⬇ Export backup (JSON)</button>
+    <label class="fileBtn">⬆ Import backup<input type="file" id="importFile" accept=".json,application/json" hidden></label>
+    <button id="clearBtn" class="danger">Delete all rules</button>
+  </div>
+  <p id="msg" role="status"></p>
+</header>
+<section class="site" id="debugSite">
+  <h2><span>Debug log</span><button class="ghost" id="debugCopy">Copy log</button></h2>
+  <p class="meta" id="debugMeta" style="font-size:12px;color:#888;">No debug log saved yet. Open a page, tap the extension icon, try to use the picker, then come back here — the latest log from any tab appears below.</p>
+  <textarea id="debugText" readonly style="width:100%;box-sizing:border-box;height:220px;font-family:ui-monospace,monospace;font-size:11px;border-radius:8px;border:1px solid rgba(127,127,140,.5);background:transparent;color:inherit;padding:8px;"></textarea>
+</section>
+<main id="list"></main>
+<p class="empty hidden" id="empty">No rules yet. Open any page, tap the <b>extension icon</b> to pop up the menu, choose “Hide an element…”, tap the element, then “Hide forever”.</p>
+<script src="rules.js"></script>
+<script src="manager.js"></script>
+</body>
+</html>

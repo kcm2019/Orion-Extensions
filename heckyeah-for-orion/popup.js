@@ -143,7 +143,7 @@ function renderCategory(cat) {
       sections.forEach(function (s) {
         viewEl.appendChild(el('div', 'sect', s.title.toUpperCase()));
         var list = el('div', 'tiles');
-        s.items.slice(0, 60).forEach(function (it) {
+        H.sortSites(s.items, H.shelfKey(s), store).slice(0, 60).forEach(function (it) {
           var b = el('button', 'tile');
           b.appendChild(el('div', 'tname', it.name));
           b.appendChild(el('div', 'thost', hostOf(it.url)));
@@ -174,15 +174,19 @@ function parseCategory(html) {
   var doc = new DOMParser().parseFromString(html, 'text/html');
   var vp = doc.querySelector('.vp-doc') || doc.body;
   var sections = [];
-  var cur = { title: 'Sites', items: [] };
-  sections.push(cur);
+  var section = '';
+  var cur = null;
   var nodes = vp.querySelectorAll('h2, h3, ul');
   for (var i = 0; i < nodes.length; i++) {
     var node = nodes[i];
-    if (node.tagName === 'H2' || node.tagName === 'H3') {
+    if (node.tagName === 'H2') {
+      section = cleanHeader(node);
+      cur = null;
+    } else if (node.tagName === 'H3') {
       var t = cleanHeader(node);
-      if (t) { cur = { title: t, items: [] }; sections.push(cur); }
+      if (t) { cur = { title: t, section: section, items: [] }; sections.push(cur); }
     } else if (node.tagName === 'UL') {
+      if (!cur) { cur = { title: section || 'Sites', section: section, items: [] }; sections.push(cur); }
       var lis = node.querySelectorAll(':scope > li');
       for (var j = 0; j < lis.length; j++) {
         var a = lis[j].querySelector('a');

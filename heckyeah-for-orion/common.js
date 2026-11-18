@@ -8,7 +8,7 @@
   var KEY = 'heckyeah_orion';
 
   function defaultStore() {
-    return { v: 1, armed: {}, entries: [], visits: 0, sweepCount: 0, sweepLog: [], storageMode: 'unknown' };
+    return { v: 1, armed: {}, entries: [], visits: 0, sweepCount: 0, sweepLog: [], storageMode: 'unknown', favorites: {}, siteOrder: {} };
   }
 
   /* ---------- storage: browser.storage.local -> chrome.storage.local -> localStorage.
@@ -253,6 +253,31 @@
 
   /* Group entries by show. Finished entries are excluded. Groups sorted by
    * most recent activity; episodes inside sorted by season/episode, then time. */
+  /* Site ordering for shelves: favorites first; inside each group,
+   * the user's saved order for that shelf (store.siteOrder[key] =
+   * [urls]) wins; anything unlisted keeps its original FMHY order. */
+  function sortSites(items, key, store) {
+    var favs = (store && store.favorites) || {};
+    var order = (store && store.siteOrder && store.siteOrder[key]) || [];
+    var rank = {};
+    for (var i = 0; i < order.length; i++) rank[order[i]] = i;
+    return (items || []).map(function (it, idx) { return { it: it, idx: idx }; })
+      .sort(function (a, b) {
+        var fa = favs[a.it.url] ? 0 : 1;
+        var fb = favs[b.it.url] ? 0 : 1;
+        if (fa !== fb) return fa - fb;
+        var ra = rank[a.it.url] != null ? rank[a.it.url] : 1000000;
+        var rb = rank[b.it.url] != null ? rank[b.it.url] : 1000000;
+        if (ra !== rb) return ra - rb;
+        return a.idx - b.idx;
+      })
+      .map(function (w) { return w.it; });
+  }
+  function shelfKey(shelf) {
+    if (!shelf) return '';
+    return shelf.section && shelf.section !== shelf.title ? shelf.section + '|' + shelf.title : (shelf.title || '');
+  }
+
   function groupByShow(entries) {
     var byKey = {};
     (entries || []).forEach(function (e) {
@@ -345,6 +370,8 @@
     parseEpisodeEnhanced: parseEpisodeEnhanced,
     isFinished: isFinished,
     groupByShow: groupByShow,
+    sortSites: sortSites,
+    shelfKey: shelfKey,
     pickNextEpisode: pickNextEpisode,
     SWEEP_RE: SWEEP_RE,
     sweepDecision: sweepDecision,

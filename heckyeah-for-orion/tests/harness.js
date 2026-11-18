@@ -246,10 +246,10 @@ function test(name, fn) {
     assert.strictEqual(none.episode, null);
   });
 
-  await test('category nav guard + episode scraping present in sources', () => {
+  await test('shelf tiles marked for arming + episode scraping present in sources', () => {
     const fmhy = fs.readFileSync(__dirname + '/../fmhy.js', 'utf8');
-    assert.ok(fmhy.includes('data-hyo-cat'), 'cat tiles marked');
-    assert.ok(fmhy.includes('stopPropagation'), 'router hijack stopped');
+    assert.ok(fmhy.includes('data-hyo-applet'), 'shelf tiles marked for arming');
+    assert.ok(fmhy.includes('stopPropagation'), 'control taps stop propagation');
     const trk = fs.readFileSync(__dirname + '/../tracker.js', 'utf8');
     assert.ok(trk.includes('application/ld+json'), 'JSON-LD scrape');
     assert.ok(trk.includes('applyEpisodeInfo'), 'episode info applied');
@@ -260,7 +260,7 @@ function test(name, fn) {
     const fmhy = fs.readFileSync(__dirname + '/../fmhy.js', 'utf8');
     assert.ok(fmhy.includes('document.addEventListener(\'DOMContentLoaded\', build)'), 'overlay auto-builds on load');
     assert.ok(!fmhy.includes('openSheet'), 'fmhy sheet removed (pill menu lives on streaming sites)');
-    assert.ok(fmhy.indexOf('renderContinue(root)') < fmhy.indexOf('renderCats(root)'), 'Continue Watching renders before Browse');
+    assert.ok(fmhy.indexOf('renderContinue(root)') < fmhy.indexOf('renderHomeVideo(root)'), 'Continue Watching renders before the streaming shelves');
     assert.ok(!fmhy.includes('hyo-resume'), 'Resume button removed — entries just open the saved link');
   });
 
@@ -381,9 +381,39 @@ function test(name, fn) {
     assert.ok(pop.includes('groupByShow'), 'continue watching grouped like the app');
   });
 
-  await test('manifest parses, version 0.9.0, files exist', () => {
+  await test('sortSites: favorites first, then saved order, then FMHY order', () => {
+    const items = [
+      { name: 'A', url: 'https://a.example' },
+      { name: 'B', url: 'https://b.example' },
+      { name: 'C', url: 'https://c.example' },
+      { name: 'D', url: 'https://d.example' }
+    ];
+    const store = {
+      favorites: { 'https://c.example': true },
+      siteOrder: { 'S|T': ['https://d.example', 'https://b.example', 'https://a.example', 'https://c.example'] }
+    };
+    const out = H.sortSites(items, 'S|T', store).map((i) => i.name);
+    assert.deepStrictEqual(out, ['C', 'D', 'B', 'A']);
+    const plain = H.sortSites(items, 'S|T', {}).map((i) => i.name);
+    assert.deepStrictEqual(plain, ['A', 'B', 'C', 'D']);
+    assert.strictEqual(H.shelfKey({ section: 'S', title: 'T' }), 'S|T');
+    assert.strictEqual(H.shelfKey({ section: '', title: 'T' }), 'T');
+  });
+
+  await test('home is streaming-only; tiles carry favorite + reorder controls', () => {
+    const fmhy = fs.readFileSync(__dirname + '/../fmhy.js', 'utf8');
+    assert.ok(fmhy.includes('renderHomeVideo'), 'home renders the /video shelves');
+    assert.ok(!fmhy.includes('renderCats(root)'), 'category grid no longer rendered');
+    assert.ok(fmhy.includes("fetch('/video')"), 'shelves fetched from /video');
+    assert.ok(fmhy.includes('hyo-fav'), 'favorite toggle on tiles');
+    assert.ok(fmhy.includes('moveSite'), 'up/down reorder persists order');
+    assert.ok(fmhy.includes('store.siteOrder[key]'), 'order saved per shelf');
+    assert.ok(fmhy.includes('isVideo || isHome'), 'arming covers home shelves');
+  });
+
+  await test('manifest parses, version 0.10.0, files exist', () => {
     const m = JSON.parse(fs.readFileSync(__dirname + '/../manifest.json', 'utf8'));
-    assert.strictEqual(m.version, '0.9.0');
+    assert.strictEqual(m.version, '0.10.0');
     assert.strictEqual(m.manifest_version, 2);
     m.content_scripts.forEach((cs) => {
       (cs.js || []).forEach((f) => assert.ok(fs.existsSync(__dirname + '/../' + f), f));

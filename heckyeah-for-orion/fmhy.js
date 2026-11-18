@@ -1,6 +1,9 @@
 /* HeckYeah for Orion — FMHY overlay (fmhy.net only).
- * Home: Continue Watching (grouped by show) + category tiles.
+ * Home: Continue Watching (grouped by show) + the Streaming
+ * shelves only (fetched from /video) — no other categories.
  * Category pages: shelves scaffolded by the page's own h2/h3 headers.
+ * Shelf tiles carry a favorite toggle (favorites sort first) and
+ * up/down reorder buttons; both persist in the shared store.
  * Video-category applet clicks arm the tracker (scope 1, armed-only).
  * Any parse failure leaves the stock site untouched (circuit breaker)
  * and shows only the floating pill. */
@@ -43,20 +46,6 @@
   }
 
   /* ---------- parsing ---------- */
-  function parseHomeCats() {
-    var out = [];
-    var cards = document.querySelectorAll('a.VPFeature');
-    for (var i = 0; i < cards.length; i++) {
-      var a = cards[i];
-      var t = a.querySelector('.title');
-      var d = a.querySelector('.details');
-      var p = '';
-      try { p = new URL(a.href).pathname.replace(/\/$/, ''); } catch (e) {}
-      if (p && t) out.push({ path: p, title: t.textContent.trim(), desc: d ? d.textContent.trim() : '' });
-    }
-    return out.length >= 6 ? out : FALLBACK_CATS;
-  }
-
   function headingTitle(h) {
     var s = '';
     for (var i = 0; i < h.childNodes.length; i++) {
@@ -91,9 +80,10 @@
   }
 
   /* Walk h2/h3/ul in document order inside .vp-doc. Each h3 (or h2 with no
-   * h3 yet) starts a shelf; each ul contributes its entries to it. */
-  function parseShelves() {
-    var docEl = document.querySelector('.vp-doc');
+   * h3 yet) starts a shelf; each ul contributes its entries to it.
+   * `container` lets Home parse a fetched /video document the same way. */
+  function parseShelves(container) {
+    var docEl = container || document.querySelector('.vp-doc');
     if (!docEl) return [];
     var nodes = docEl.querySelectorAll('h2, h3, ul');
     var shelves = [];
@@ -214,23 +204,36 @@
     });
   }
 
-  function renderCats(root) {
-    root.appendChild(el('div', 'hyo-shelf-title', 'Browse'));
-    var grid = el('div', 'hyo-grid');
-    parseHomeCats().forEach(function (c) {
-      var a = el('a', 'hyo-cat');
-      a.href = c.path;
-      a.setAttribute('data-hyo-cat', c.path);
-      a.appendChild(el('div', 'hyo-t', c.title));
-      if (c.desc) a.appendChild(el('div', 'hyo-sub', c.desc));
-      grid.appendChild(a);
-    });
-    root.appendChild(grid);
+  /* Home is streaming-only now: the /video shelves, fetched and
+   * parsed with the same walker the category pages use. */
+  function renderHomeVideo(root) {
+    var holder = el('div', '');
+    holder.appendChild(el('div', 'hyo-diag', 'Loading streaming sites\u2026'));
+    root.appendChild(holder);
+    fetch('/video')
+      .then(function (r) { return r.text(); })
+      .then(function (html) {
+        var doc = new DOMParser().parseFromString(html, 'text/html');
+        var vp = doc.querySelector('.vp-doc');
+        var shelves = vp ? parseShelves(vp) : [];
+        holder.innerHTML = '';
+        if (!shelves.length) {
+          holder.appendChild(el('div', 'hyo-diag', 'Could not load the streaming shelves \u2014 tap \ud83c\udf10 Web to browse fmhy.net directly.'));
+          return;
+        }
+        renderShelves(holder, shelves);
+      })
+      .catch(function () {
+        holder.innerHTML = '';
+        holder.appendChild(el('div', 'hyo-diag', 'Could not load the streaming shelves \u2014 tap \ud83c\udf10 Web to browse fmhy.net directly.'));
+      });
   }
 
-  function renderShelves(root) {
-    var shelves = parseShelves();
+  function renderShelves(root, shelvesArg) {
+    var shelves = shelvesArg || parseShelves();
     if (shelves.length < 1) throw new Error('no shelves parsed');
+    if (!store.favorites) store.favorites = {};
+    if (!store.siteOrder) store.siteOrder = {};
     var lastSection = null;
     shelves.forEach(function (s) {
       if (s.section && s.section !== lastSection && s.section !== s.title) {
@@ -240,19 +243,50 @@
       root.appendChild(el('div', 'hyo-shelf-title', s.title));
       var row = el('div', 'hyo-row');
       var CAP = 20;
-      s.items.forEach(function (item, idx) {
-        var a = el('a', 'hyo-tile');
-        a.href = item.url;
-        a.setAttribute('target', '_blank');
-        a.setAttribute('rel', 'noreferrer');
-        a.setAttribute('data-hyo-applet', item.name);
-        if (idx >= CAP) a.style.display = 'none';
-        a.appendChild(el('div', 'hyo-t', (item.starred ? '\u2605 ' : '') + item.name));
-        if (item.desc) a.appendChild(el('div', 'hyo-d', item.desc));
-        row.appendChild(a);
+      var key = H.shelfKey(s);
+      var items = H.sortSites(s.items, key, store);
+      items.forEach(function (item, idx) {
+        var tile = el('div', 'hyo-tile');
+        tile.setAttribute('data-hyo-applet', item.name);
+        tile.setAttribute('data-hyo-url', item.url);
+        if (idx >= CAP) tile.style.display = 'none';
+        var isFav = !!store.favorites[item.url];
+        tile.appendChild(el('div', 'hyo-t', (item.starred ? '\u2605 ' : '') + item.name));
+        if (item.desc) tile.appendChild(el('div', 'hyo-d', item.desc));
+        var tools = el('div', 'hyo-tools');
+        var fav = el('button', 'hyo-tool hyo-fav' + (isFav ? ' on' : ''), isFav ? '\u2605' : '\u2606');
+        fav.setAttribute('aria-label', 'Favorite');
+        fav.addEventListener('click', function (ev) {
+          ev.preventDefault(); ev.stopPropagation();
+          if (store.favorites[item.url]) delete store.favorites[item.url];
+          else store.favorites[item.url] = true;
+          H.saveStore(store).then(rebuild);
+        });
+        tools.appendChild(fav);
+        var up = el('button', 'hyo-tool', '\u25b2');
+        up.setAttribute('aria-label', 'Move up');
+        if (idx === 0) up.style.opacity = '0.3';
+        up.addEventListener('click', function (ev) {
+          ev.preventDefault(); ev.stopPropagation();
+          moveSite(key, items, idx, -1);
+        });
+        tools.appendChild(up);
+        var down = el('button', 'hyo-tool', '\u25bc');
+        down.setAttribute('aria-label', 'Move down');
+        if (idx === items.length - 1) down.style.opacity = '0.3';
+        down.addEventListener('click', function (ev) {
+          ev.preventDefault(); ev.stopPropagation();
+          moveSite(key, items, idx, 1);
+        });
+        tools.appendChild(down);
+        tile.appendChild(tools);
+        tile.addEventListener('click', function () {
+          window.open(item.url, '_blank');
+        });
+        row.appendChild(tile);
       });
-      if (s.items.length > CAP) {
-        var hiddenCount = s.items.length - CAP;
+      if (items.length > CAP) {
+        var hiddenCount = items.length - CAP;
         var more = el('div', 'hyo-more', '+' + hiddenCount + ' more');
         more.addEventListener('click', function () {
           var tiles = row.querySelectorAll('.hyo-tile');
@@ -264,6 +298,16 @@
       }
       root.appendChild(row);
     });
+  }
+
+  /* Persist the shelf's full displayed order after an up/down swap. */
+  function moveSite(key, items, idx, dir) {
+    var j = idx + dir;
+    if (j < 0 || j >= items.length) return;
+    var urls = items.map(function (it) { return it.url; });
+    var tmp = urls[idx]; urls[idx] = urls[j]; urls[j] = tmp;
+    store.siteOrder[key] = urls;
+    H.saveStore(store).then(rebuild);
   }
 
   var overlay = null;
@@ -374,13 +418,13 @@
 
       if (isHome) {
         renderContinue(root);
-        renderCats(root);
+        renderHomeVideo(root);
       } else {
         renderShelves(root);
       }
 
       var diag = el('div', 'hyo-diag',
-        'HeckYeah for Orion 0.9.0 \u00b7 storage: ' + store.storageMode +
+        'HeckYeah for Orion 0.10.0 \u00b7 storage: ' + store.storageMode +
         ' \u00b7 visits ' + store.visits +
         ' \u00b7 tracked ' + store.entries.length +
         ' \u00b7 sweep removals ' + (store.sweepCount || 0));
@@ -396,17 +440,19 @@
   }
 
   function rebuild() {
+    var st = overlay ? overlay.scrollTop : 0;
     if (overlay) { overlay.remove(); overlay = null; }
     build();
+    if (overlay && st) overlay.scrollTop = st;
   }
 
-  /* ---------- arming (video category only) ---------- */
-  if (isVideo) {
+  /* ---------- arming (streaming shelves: /video page + Home) ---------- */
+  if (isVideo || isHome) {
     var armHandler = function (ev) {
       var t = ev.target;
-      var a = t && t.closest ? t.closest('a[data-hyo-applet]') : null;
+      var a = t && t.closest ? t.closest('[data-hyo-applet]') : null;
       if (!a) return;
-      var host = H.hostOf(a.href);
+      var host = H.hostOf(a.getAttribute('data-hyo-url') || a.href || '');
       if (!host) return;
       // re-read then write, so we never clobber tracker updates
       H.loadStore().then(function (s) {
@@ -418,25 +464,6 @@
     // arm write lands before the tracker's first store read over there
     document.addEventListener('pointerdown', armHandler, true);
     document.addEventListener('click', armHandler, true);
-  }
-
-  /* ---------- category navigation ----------
-   * fmhy.net is a VitePress SPA: its router puts a click handler on the
-   * window that hijacks EVERY same-origin link click in the document —
-   * including our overlay tiles — preventDefault()s it and swaps the
-   * page content underneath our overlay, so the tap looked dead.
-   * A capture-phase delegated handler runs long before that bubble-phase
-   * router handler: stop it, then do a real full navigation so the
-   * content script rebuilds the overlay for the category. */
-  if (isHome) {
-    document.addEventListener('click', function (ev) {
-      var t = ev.target;
-      var a = t && t.closest ? t.closest('a[data-hyo-cat]') : null;
-      if (!a) return;
-      ev.preventDefault();
-      ev.stopPropagation();
-      location.href = a.href;
-    }, true);
   }
 
   /* ---------- boot ----------

@@ -1,3 +1,17 @@
+# HeckYeah for Orion — v0.10.0
+
+Home is streaming-only, and shelves are yours to arrange:
+- The app view's main screen no longer shows the 12-category
+  grid. Home = Continue Watching + the Streaming shelves, fetched
+  from /video and parsed with the same walker as the category
+  pages. (Other categories still exist on fmhy.net itself via
+  🌐 Web; the popup is unchanged.)
+- Every streaming-site tile now carries three controls: a ☆/★
+  favorite toggle and ▲/▼ reorder buttons. Favorites sort to the
+  top of their shelf; the custom order (full displayed order per
+  shelf) persists in the store (favorites / siteOrder), and the
+  popup's shelves honor the same sorting.
+
 # HeckYeah for Orion — v0.9.0
 
 New: the app lives in the toolbar popup. Clicking the extension

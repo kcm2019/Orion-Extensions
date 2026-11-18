@@ -253,36 +253,21 @@
         var isFav = !!store.favorites[item.url];
         tile.appendChild(el('div', 'hyo-t', (item.starred ? '\u2605 ' : '') + item.name));
         if (item.desc) tile.appendChild(el('div', 'hyo-d', item.desc));
-        var tools = el('div', 'hyo-tools');
-        var fav = el('button', 'hyo-tool hyo-fav' + (isFav ? ' on' : ''), isFav ? '\u2605' : '\u2606');
+        var fav = el('button', 'hyo-fav' + (isFav ? ' on' : ''), isFav ? '\u2605' : '\u2606');
         fav.setAttribute('aria-label', 'Favorite');
+        fav.addEventListener('pointerdown', function (ev) { ev.stopPropagation(); });
         fav.addEventListener('click', function (ev) {
           ev.preventDefault(); ev.stopPropagation();
           if (store.favorites[item.url]) delete store.favorites[item.url];
           else store.favorites[item.url] = true;
           H.saveStore(store).then(rebuild);
         });
-        tools.appendChild(fav);
-        var up = el('button', 'hyo-tool', '\u25b2');
-        up.setAttribute('aria-label', 'Move up');
-        if (idx === 0) up.style.opacity = '0.3';
-        up.addEventListener('click', function (ev) {
-          ev.preventDefault(); ev.stopPropagation();
-          moveSite(key, items, idx, -1);
-        });
-        tools.appendChild(up);
-        var down = el('button', 'hyo-tool', '\u25bc');
-        down.setAttribute('aria-label', 'Move down');
-        if (idx === items.length - 1) down.style.opacity = '0.3';
-        down.addEventListener('click', function (ev) {
-          ev.preventDefault(); ev.stopPropagation();
-          moveSite(key, items, idx, 1);
-        });
-        tools.appendChild(down);
-        tile.appendChild(tools);
+        tile.appendChild(fav);
         tile.addEventListener('click', function () {
+          if (tile.__hyoSuppress) { tile.__hyoSuppress = false; return; }
           window.open(item.url, '_blank');
         });
+        attachTileDrag(tile, row, key);
         row.appendChild(tile);
       });
       if (items.length > CAP) {
@@ -300,14 +285,192 @@
     });
   }
 
-  /* Persist the shelf's full displayed order after an up/down swap. */
-  function moveSite(key, items, idx, dir) {
-    var j = idx + dir;
-    if (j < 0 || j >= items.length) return;
-    var urls = items.map(function (it) { return it.url; });
-    var tmp = urls[idx]; urls[idx] = urls[j]; urls[j] = tmp;
-    store.siteOrder[key] = urls;
-    H.saveStore(store).then(rebuild);
+  /* ---------- drag-to-reorder (replaces the up/down buttons) ----------
+   * Long-press a tile (~260 ms, finger still) to pick it up; drag
+   * sideways and the other tiles slide out of the way (FLIP-style
+   * transforms, DOM order untouched until the drop). On drop the new
+   * order is written to store.siteOrder[key] and the DOM is settled
+   * in place — no rebuild, no scroll jump. A quick tap still opens
+   * the site; a swipe still scrolls the row (movement before the
+   * long-press fires cancels the pickup). While dragging, a
+   * non-passive touchmove preventer stops the row/page scrolling. */
+  function attachTileDrag(tile, row, key) {
+    var timer = 0, pending = false, dragging = false;
+    var sx = 0, sy = 0, pid = null;
+    var tiles = [], homes = [], pitch = 208, startIdx = 0, targetIdx = 0;
+
+    function blockScroll(ev) { ev.preventDefault(); }
+    function endListeners() {
+      document.removeEventListener('touchmove', blockScroll, { passive: false });
+    }
+    function clearTransforms() {
+      tiles.forEach(function (t) { t.style.transform = ''; t.style.transition = ''; });
+      tile.style.zIndex = '';
+      tile.classList.remove('hyo-drag');
+    }
+    function activate(ev) {
+      pending = false; dragging = true;
+      tiles = [];
+      var all = row.querySelectorAll('.hyo-tile');
+      for (var i = 0; i < all.length; i++) if (all[i].style.display !== 'none') tiles.push(all[i]);
+      startIdx = tiles.indexOf(tile);
+      if (startIdx < 0 || tiles.length < 2) { dragging = false; return; }
+      homes = tiles.map(function (t) { return t.offsetLeft; });
+      pitch = tiles.length > 1 ? (homes[1] - homes[0]) : 208;
+      if (!pitch || pitch < 10) pitch = 208;
+      targetIdx = startIdx;
+      tile.classList.add('hyo-drag');
+      tile.style.transition = 'none';
+      tile.style.zIndex = '60';
+      try { tile.setPointerCapture(pid); } catch (e) {}
+      document.addEventListener('touchmove', blockScroll, { passive: false });
+      if (navigator.vibrate) { try { navigator.vibrate(8); } catch (e) {} }
+    }
+    function onMove(ev) {
+      if (pending) {
+        if (Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) > 10) {
+          pending = false; clearTimeout(timer);
+        }
+        return;
+      }
+      if (!dragging) return;
+      ev.preventDefault();
+      var dx = ev.clientX - sx;
+      var min = homes[0] - homes[startIdx], max = homes[homes.length - 1] - homes[startIdx];
+      if (dx < min) dx = min; if (dx > max) dx = max;
+      tile.style.transform = 'translateX(' + dx + 'px)';
+      var t = startIdx + Math.round(dx / pitch);
+      if (t < 0) t = 0; if (t > tiles.length - 1) t = tiles.length - 1;
+      if (t !== targetIdx) {
+        targetIdx = t;
+        tiles.forEach(function (tl, i) {
+          if (tl === tile) return;
+          var shift = 0;
+          if (startIdx < targetIdx && i > startIdx && i <= targetIdx) shift = -pitch;
+          else if (targetIdx < startIdx && i >= targetIdx && i < startIdx) shift = pitch;
+          tl.style.transform = shift ? 'translateX(' + shift + 'px)' : '';
+        });
+      }
+    }
+    function onUp(commit) {
+      if (pending) { pending = false; clearTimeout(timer); return; }
+      if (!dragging) return;
+      dragging = false;
+      endListeners();
+      if (commit && targetIdx !== startIdx) {
+        tile.__hyoSuppress = true;
+        setTimeout(function () { tile.__hyoSuppress = false; }, 120);
+        var order = tiles.slice();
+        order.splice(startIdx, 1);
+        order.splice(targetIdx, 0, tile);
+        var anchor = null;
+        var all = row.querySelectorAll('.hyo-tile');
+        for (var i = 0; i < all.length; i++) if (all[i].style.display === 'none') { anchor = all[i]; break; }
+        if (!anchor) anchor = row.querySelector('.hyo-more');
+        order.forEach(function (t) { row.insertBefore(t, anchor); });
+        var urls = order.map(function (t) { return t.getAttribute('data-hyo-url'); });
+        for (var j = 0; j < all.length; j++) {
+          if (all[j].style.display === 'none') urls.push(all[j].getAttribute('data-hyo-url'));
+        }
+        if (!store.siteOrder) store.siteOrder = {};
+        store.siteOrder[key] = urls;
+        H.saveStore(store);
+      } else if (commit) {
+        tile.__hyoSuppress = true;
+        setTimeout(function () { tile.__hyoSuppress = false; }, 120);
+      }
+      clearTransforms();
+    }
+    tile.addEventListener('pointerdown', function (ev) {
+      if (ev.button != null && ev.button !== 0) return;
+      pending = true; sx = ev.clientX; sy = ev.clientY; pid = ev.pointerId;
+      clearTimeout(timer);
+      timer = setTimeout(function () { if (pending) activate(ev); }, 260);
+    });
+    tile.addEventListener('pointermove', onMove);
+    tile.addEventListener('pointerup', function () { onUp(true); });
+    tile.addEventListener('pointercancel', function () { onUp(false); });
+    tile.addEventListener('contextmenu', function (ev) { ev.preventDefault(); });
+  }
+
+  /* ---------- update checker (v0.11.0) ----------
+   * Banner + footer live on Home only. Auto check is throttled
+   * (12 h) inside update-check.js; the banner shows only a found,
+   * undismissed update. Download opens the .xpi link — installing
+   * stays a manual Install-from-File step in Orion. */
+  var U = window.HYOUpdate || null;
+  var updBanner = null, updStatus = null, updAvail = null;
+
+  function paintUpdBanner() {
+    if (!updBanner) return;
+    if (updAvail) {
+      updBanner.style.display = '';
+      var t = updBanner.querySelector('.hyo-upd-text');
+      if (t) t.textContent = 'Update available: v' + updAvail.version;
+    } else {
+      updBanner.style.display = 'none';
+    }
+  }
+  function refreshUpdFromStore() {
+    if (!U) return;
+    try {
+      U.getState().then(function (st) {
+        updAvail = (st.available && st.available.version !== st.dismissed) ? st.available : null;
+        paintUpdBanner();
+      }, function () {});
+    } catch (e) {}
+  }
+  function runUpdCheck(force) {
+    if (!U) {
+      if (updStatus) updStatus.textContent = 'Couldn\u2019t check for updates (feed unreachable)';
+      return;
+    }
+    if (updStatus && force) updStatus.textContent = 'Checking\u2026';
+    try {
+      U.checkNow(force).then(function (res) {
+        if (updStatus) {
+          if (res.state === 'update') updStatus.textContent = 'Update available: v' + res.version;
+          else if (res.state === 'current') updStatus.textContent = 'You\u2019re on the latest version (v' + U.currentVersion() + ')';
+          else updStatus.textContent = 'Couldn\u2019t check for updates (feed unreachable)';
+        }
+        refreshUpdFromStore();
+      }, function () {
+        if (updStatus) updStatus.textContent = 'Couldn\u2019t check for updates (feed unreachable)';
+      });
+    } catch (e) {
+      if (updStatus) updStatus.textContent = 'Couldn\u2019t check for updates (feed unreachable)';
+    }
+  }
+  function buildUpdBanner() {
+    var b = el('div', 'hyo-upd');
+    b.style.display = 'none';
+    b.appendChild(el('span', 'hyo-upd-text', ''));
+    var dl = el('button', 'hyo-upd-dl', 'Download');
+    dl.addEventListener('click', function (ev) {
+      ev.preventDefault(); ev.stopPropagation();
+      if (updAvail && U) U.openUpdate(updAvail.update_link);
+    });
+    b.appendChild(dl);
+    var x = el('button', 'hyo-upd-x', '\u2715');
+    x.setAttribute('aria-label', 'Dismiss update notice');
+    x.addEventListener('click', function (ev) {
+      ev.preventDefault(); ev.stopPropagation();
+      if (updAvail && U) { try { U.dismiss(updAvail.version); } catch (e) {} }
+      updAvail = null;
+      paintUpdBanner();
+    });
+    b.appendChild(x);
+    updBanner = b;
+    return b;
+  }
+  function buildUpdFoot() {
+    var f = el('div', 'hyo-upd-foot');
+    var btn = el('button', 'hyo-upd-check', 'Check for updates');
+    btn.addEventListener('click', function () { runUpdCheck(true); });
+    f.appendChild(btn);
+    updStatus = el('span', 'hyo-upd-status', '');
+    f.appendChild(updStatus);
+    return f;
   }
 
   var overlay = null;
@@ -400,21 +563,10 @@
         pairBtn.addEventListener('click', function () { H.Remote.startHostPanel(); });
         head.appendChild(pairBtn);
       }
-      var apBtn = el('button', 'hyo-webbtn', '');
-      function paintAp() {
-        var on = store.airplayForce !== false;
-        apBtn.textContent = '\ud83d\udce1 AirPlay: ' + (on ? 'Forced' : 'Off');
-        apBtn.style.color = on ? '#0a84ff' : '';
-        apBtn.style.fontWeight = on ? '700' : '';
-      }
-      paintAp();
-      apBtn.addEventListener('click', function () {
-        store.airplayForce = store.airplayForce === false;
-        H.saveStore(store);
-        paintAp();
-      });
-      head.appendChild(apBtn);
       root.appendChild(head);
+
+      updBanner = null; updStatus = null;
+      if (isHome && U) root.appendChild(buildUpdBanner());
 
       if (isHome) {
         renderContinue(root);
@@ -424,14 +576,17 @@
       }
 
       var diag = el('div', 'hyo-diag',
-        'HeckYeah for Orion 0.10.0 \u00b7 storage: ' + store.storageMode +
+        'HeckYeah for Orion 0.12.0 \u00b7 storage: ' + store.storageMode +
         ' \u00b7 visits ' + store.visits +
         ' \u00b7 tracked ' + store.entries.length +
         ' \u00b7 sweep removals ' + (store.sweepCount || 0));
       root.appendChild(diag);
 
+      if (isHome && U) root.appendChild(buildUpdFoot());
+
       document.body.appendChild(root);
       overlay = root;
+      if (isHome && U) { refreshUpdFromStore(); runUpdCheck(false); }
     } catch (e) {
       // circuit breaker: stock site stays fully usable
       if (overlay) { overlay.remove(); overlay = null; }

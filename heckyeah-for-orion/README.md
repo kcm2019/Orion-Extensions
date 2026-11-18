@@ -1,3 +1,47 @@
+# HeckYeah for Orion — v0.12.0
+
+Cleaner tiles, drag-to-reorder, streaming-only popup, no AirPlay:
+- The popup's home is now the same as the app view: Continue
+  Watching + the Streaming shelves (fetched from /video). The
+  category grid is gone there too.
+- The up/down buttons are gone. Long-press any site tile
+  (~260 ms, finger still) to pick it up, drag it along the shelf,
+  and the other sites slide out of the way; drop to save the new
+  order. Works in the app view (horizontal shelves) and the popup
+  (vertical lists). The favorite star is now a small button in
+  the tile's corner — the only control left on the tile.
+- The AirPlay: Forced feature is removed entirely: no header
+  chip, no popup toggle, and the tracker no longer touches
+  disableRemotePlayback / x-webkit-airplay on videos.
+
+# HeckYeah for Orion — v0.11.0
+
+New: an in-extension update checker (`update-check.js`). It can
+DISCOVER a newer version and offer it — it cannot install updates
+itself (no WebExtension API does that); the offer opens the new
+.xpi download link and you install from file in Orion, as today.
+
+## Updates
+- The checker polls a Firefox-style update feed
+  (`addons → heckyeah-orion@local → updates[]`, highest version
+  strictly newer than the installed one wins). Default feed:
+  `https://raw.githubusercontent.com/kcm2019/Orion-Extensions/main/updates.json`
+  — overridable via the `upd_feed_url` storage key.
+- Caveat: that repo is PRIVATE today, so an unauthenticated fetch
+  may 404. Auto-checks fail silently in that case; a manual check
+  reports honestly (up to date / update available / couldn't reach
+  the feed) — never a false "up to date".
+- Auto check: throttled to once per 12 h, run when the app-view
+  Home renders and when the popup opens.
+- Notice: a slim banner at the top of the app-view Home (above
+  Continue Watching) — and in the popup — when an update is found
+  and not dismissed: **Download** opens the .xpi link, ✕ dismisses
+  that version.
+- Manual check: "Check for updates" in the app-view Home footer
+  row and in the popup footer, with the result reported inline.
+- The checker is loaded on fmhy.net and in the popup only — not
+  in the tracker (<all_urls>) context.
+
 # HeckYeah for Orion — v0.10.0
 
 Home is streaming-only, and shelves are yours to arrange:

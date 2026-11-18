@@ -254,56 +254,10 @@
       return bestEl;
     }
 
-    /* ---- Forced AirPlay (setting: store.airplayForce, default ON).
-     * Sites block the AirPlay button two ways: the
-     * `disableremoteplayback` attribute/property and
-     * x-webkit-airplay="deny". Strip both, keep stripping them when
-     * the player re-applies them (attribute observer), and re-assert
-     * at the moment the video enters the iOS native player — so the
-     * native fullscreen controls offer AirPlay whenever iOS allows
-     * the video to be routed at all. ---- */
-    var airplayForced = store.airplayForce !== false;
-    function forceAirplay(v) {
-      if (!airplayForced || !v) return;
-      try {
-        if (v.hasAttribute && v.hasAttribute('disableremoteplayback')) v.removeAttribute('disableremoteplayback');
-        if (v.disableRemotePlayback) v.disableRemotePlayback = false;
-        if (v.getAttribute && v.getAttribute('x-webkit-airplay') === 'deny') v.setAttribute('x-webkit-airplay', 'allow');
-      } catch (e) {}
-    }
-    function sweepAirplay() {
-      if (!airplayForced) return;
-      var vids = document.querySelectorAll('video');
-      for (var i = 0; i < vids.length; i++) forceAirplay(vids[i]);
-    }
-    try {
-      var apSweepTimer = 0;
-      new MutationObserver(function (muts) {
-        if (!airplayForced) return;
-        var needSweep = false;
-        for (var i = 0; i < muts.length; i++) {
-          var m = muts[i];
-          if (m.type === 'attributes') forceAirplay(m.target);
-          else if (m.addedNodes && m.addedNodes.length) needSweep = true;
-        }
-        if (needSweep && !apSweepTimer) {
-          apSweepTimer = setTimeout(function () { apSweepTimer = 0; sweepAirplay(); }, 700);
-        }
-      }).observe(document.documentElement, {
-        subtree: true, childList: true, attributes: true,
-        attributeFilter: ['disableremoteplayback', 'x-webkit-airplay']
-      });
-      document.addEventListener('webkitbeginfullscreen', function (e) {
-        if (e && e.target && e.target.tagName === 'VIDEO') forceAirplay(e.target);
-        sweepAirplay();
-      }, true);
-    } catch (e) {}
-
     function wireVideo(v) {
       if (!v || v.__hyoWired) return;
       v.__hyoWired = true;
       video = v;
-      forceAirplay(v);
       upsertEntry({});
       v.addEventListener('loadedmetadata', function () {
         upsertEntry({ dur: v.duration || 0 });

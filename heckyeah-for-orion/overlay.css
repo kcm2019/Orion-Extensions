@@ -90,26 +90,28 @@
 #hyo-overlay .hyo-cat .hyo-sub { font-size: 12.5px; color: #9fb0c9; margin-top: 5px; line-height: 1.4; }
 #hyo-overlay .hyo-tile {
   position: relative; cursor: pointer;
+  transition: transform 0.18s ease;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
   flex: 0 0 auto; width: 196px; max-width: 68vw; text-decoration: none; color: #f2f4f8;
   background: linear-gradient(155deg, rgba(255,255,255,0.10), rgba(255,255,255,0.04));
   border: 1px solid rgba(255,255,255,0.13); border-radius: 18px; padding: 12px 13px;
   backdrop-filter: blur(18px) saturate(160%); -webkit-backdrop-filter: blur(18px) saturate(160%);
   box-shadow: 0 10px 26px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.12);
 }
-#hyo-overlay .hyo-tools {
-  display: flex; gap: 6px; margin-top: 10px;
-}
-#hyo-overlay .hyo-tool {
+#hyo-overlay .hyo-fav {
   appearance: none; -webkit-appearance: none;
-  width: 30px; height: 30px; border-radius: 50%; cursor: pointer;
-  background: rgba(255,255,255,0.10); border: 1px solid rgba(255,255,255,0.16);
-  color: #d7deeb; font-size: 13px; line-height: 1;
-  display: flex; align-items: center; justify-content: center; padding: 0;
+  position: absolute; top: 8px; right: 8px;
+  width: 28px; height: 28px; border-radius: 50%; cursor: pointer;
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14);
+  color: #aeb9cc; font-size: 14px; line-height: 1; padding: 0;
+  display: flex; align-items: center; justify-content: center;
 }
-#hyo-overlay .hyo-tool:active { background: rgba(10,132,255,0.35); }
-#hyo-overlay .hyo-fav { font-size: 15px; }
 #hyo-overlay .hyo-fav.on { color: #ffd60a; border-color: rgba(255,214,10,0.55); background: rgba(255,214,10,0.14); }
-#hyo-overlay .hyo-tile .hyo-t { font-size: 14.5px; font-weight: 650; }
+#hyo-overlay .hyo-tile.hyo-drag {
+  border-color: rgba(10,132,255,0.65);
+  box-shadow: 0 18px 42px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.12);
+}
+#hyo-overlay .hyo-tile .hyo-t { font-size: 14.5px; font-weight: 650; padding-right: 28px; }
 #hyo-overlay .hyo-tile .hyo-d {
   font-size: 12.5px; color: #9fb0c9; margin-top: 5px; line-height: 1.45;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
@@ -125,6 +127,34 @@
   border-radius: 20px; color: #ffb3ae; font-size: 13.5px; cursor: pointer;
 }
 #hyo-overlay .hyo-diag { margin-top: 26px; font-size: 11px; color: #66707f; text-align: center; }
+#hyo-overlay .hyo-upd {
+  display: flex; align-items: center; gap: 10px;
+  margin: 10px 2px 2px; padding: 10px 12px;
+  background: linear-gradient(155deg, rgba(10,132,255,0.26), rgba(10,132,255,0.10));
+  border: 1px solid rgba(10,132,255,0.48); border-radius: 16px;
+  backdrop-filter: blur(18px) saturate(160%); -webkit-backdrop-filter: blur(18px) saturate(160%);
+  box-shadow: 0 10px 26px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.13);
+}
+#hyo-overlay .hyo-upd-text { flex: 1; min-width: 0; font-size: 14px; font-weight: 650; color: #eaf3ff; }
+#hyo-overlay .hyo-upd-dl {
+  flex: 0 0 auto; background: #0a84ff; color: #fff; border: none; border-radius: 999px;
+  padding: 7px 14px; font-size: 13px; font-weight: 650; cursor: pointer;
+}
+#hyo-overlay .hyo-upd-dl:active { background: #2f97ff; }
+#hyo-overlay .hyo-upd-x {
+  flex: 0 0 auto; background: rgba(255,255,255,0.10); color: #fff; border: none; border-radius: 50%;
+  width: 26px; height: 26px; font-size: 12px; cursor: pointer;
+}
+#hyo-overlay .hyo-upd-foot {
+  display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;
+  margin-top: 14px;
+}
+#hyo-overlay .hyo-upd-check {
+  background: rgba(255,255,255,0.08); color: #cfe3ff; border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 999px; padding: 7px 14px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+#hyo-overlay .hyo-upd-check:active { background: rgba(10,132,255,0.35); }
+#hyo-overlay .hyo-upd-status { font-size: 12px; color: #9fb0c9; }
 #hyo-pill {
   position: fixed; right: 14px; bottom: 18px; z-index: 2147483001;
   background: rgba(22,26,42,0.55); color: #fff; border: 1px solid rgba(255,255,255,0.22);

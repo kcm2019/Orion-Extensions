@@ -357,15 +357,16 @@ function test(name, fn) {
     assert.ok(rem.includes('lastTraffic'), 'host tracks live traffic');
   });
 
-  await test('forced AirPlay: strips remote-playback blocks, re-asserts at fullscreen', () => {
+  await test('AirPlay feature removed everywhere (Kurt, v0.12.0)', () => {
     const trk = fs.readFileSync(__dirname + '/../tracker.js', 'utf8');
-    assert.ok(trk.includes('disableRemotePlayback'), 'clears the property');
-    assert.ok(trk.includes('disableremoteplayback'), 'removes the attribute');
-    assert.ok(trk.includes('x-webkit-airplay'), 'clears the WebKit deny');
-    assert.ok(trk.includes('airplayForce'), 'setting read from the store');
-    assert.ok(trk.includes('attributeFilter'), 're-applied blocks are stripped again');
+    assert.ok(!trk.includes('disableRemotePlayback'), 'no remote-playback stripping');
+    assert.ok(!trk.includes('airplayForce'), 'setting no longer read');
     const fmhy = fs.readFileSync(__dirname + '/../fmhy.js', 'utf8');
-    assert.ok(fmhy.includes('AirPlay: '), 'toggle chip in the app view');
+    assert.ok(!fmhy.includes('AirPlay: '), 'no toggle chip in the app view');
+    const popHtml = fs.readFileSync(__dirname + '/../popup.html', 'utf8');
+    assert.ok(!popHtml.includes('airplay'), 'no toggle in the popup footer');
+    const pop = fs.readFileSync(__dirname + '/../popup.js', 'utf8');
+    assert.ok(!pop.includes('airplay'), 'no airplay code in the popup');
   });
 
   await test('toolbar popup: the app in a popup, navigable', () => {
@@ -376,7 +377,8 @@ function test(name, fn) {
     const pop = fs.readFileSync(__dirname + '/../popup.js', 'utf8');
     assert.ok(pop.includes('tabs.create'), 'sites open in tabs');
     assert.ok(pop.includes('store.armed[host]'), 'launches arm the tracker like the app view');
-    assert.ok(pop.includes('VPFeature'), 'categories parsed live from fmhy');
+    assert.ok(pop.includes('fmhy.net/video'), 'popup home is the streaming shelves');
+    assert.ok(!pop.includes('SEED_CATS'), 'category grid gone from the popup');
     assert.ok(pop.includes('parseCategory'), 'shelves parsed in the popup');
     assert.ok(pop.includes('groupByShow'), 'continue watching grouped like the app');
   });
@@ -400,20 +402,44 @@ function test(name, fn) {
     assert.strictEqual(H.shelfKey({ section: '', title: 'T' }), 'T');
   });
 
-  await test('home is streaming-only; tiles carry favorite + reorder controls', () => {
+  await test('home is streaming-only; tiles carry favorite + drag reorder', () => {
     const fmhy = fs.readFileSync(__dirname + '/../fmhy.js', 'utf8');
     assert.ok(fmhy.includes('renderHomeVideo'), 'home renders the /video shelves');
     assert.ok(!fmhy.includes('renderCats(root)'), 'category grid no longer rendered');
     assert.ok(fmhy.includes("fetch('/video')"), 'shelves fetched from /video');
     assert.ok(fmhy.includes('hyo-fav'), 'favorite toggle on tiles');
-    assert.ok(fmhy.includes('moveSite'), 'up/down reorder persists order');
+    assert.ok(!fmhy.includes('moveSite'), 'up/down buttons removed');
+    assert.ok(fmhy.includes('attachTileDrag'), 'long-press drag reorder in the app view');
     assert.ok(fmhy.includes('store.siteOrder[key]'), 'order saved per shelf');
     assert.ok(fmhy.includes('isVideo || isHome'), 'arming covers home shelves');
+    const pop = fs.readFileSync(__dirname + '/../popup.js', 'utf8');
+    assert.ok(pop.includes('attachPopDrag'), 'drag reorder in the popup too');
+    assert.ok(pop.includes('renderPopShelves'), 'popup renders streaming shelves');
   });
 
-  await test('manifest parses, version 0.10.0, files exist', () => {
+  await test('update checker: wired into app view + popup, not the tracker', () => {
     const m = JSON.parse(fs.readFileSync(__dirname + '/../manifest.json', 'utf8'));
-    assert.strictEqual(m.version, '0.10.0');
+    const fmhyList = m.content_scripts[0].js;
+    const trackerList = m.content_scripts[1].js;
+    assert.ok(fmhyList.includes('update-check.js'), 'update-check in fmhy list');
+    assert.ok(fmhyList.indexOf('update-check.js') < fmhyList.indexOf('fmhy.js'), 'loads before fmhy.js');
+    assert.ok(!trackerList.includes('update-check.js'), 'not loaded in tracker context');
+    const popHtml = fs.readFileSync(__dirname + '/../popup.html', 'utf8');
+    assert.ok(popHtml.includes('update-check.js'), 'popup loads update-check.js');
+    assert.ok(popHtml.indexOf('update-check.js') < popHtml.indexOf('popup.js'), 'popup: loads before popup.js');
+    const fmhy = fs.readFileSync(__dirname + '/../fmhy.js', 'utf8');
+    assert.ok(fmhy.includes('HYOUpdate'), 'app view uses the checker');
+    assert.ok(fmhy.includes('hyo-upd'), 'app view banner present');
+    assert.ok(fmhy.includes('Check for updates'), 'app view manual check present');
+    const pop = fs.readFileSync(__dirname + '/../popup.js', 'utf8');
+    assert.ok(pop.includes('HYOUpdate'), 'popup uses the checker');
+    assert.ok(pop.includes('checkNow'), 'popup manual/auto check wired');
+    assert.ok(fs.existsSync(__dirname + '/../update-check.js'), 'update-check.js exists');
+  });
+
+  await test('manifest parses, version 0.12.0, files exist', () => {
+    const m = JSON.parse(fs.readFileSync(__dirname + '/../manifest.json', 'utf8'));
+    assert.strictEqual(m.version, '0.12.0');
     assert.strictEqual(m.manifest_version, 2);
     m.content_scripts.forEach((cs) => {
       (cs.js || []).forEach((f) => assert.ok(fs.existsSync(__dirname + '/../' + f), f));

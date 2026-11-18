@@ -13,13 +13,22 @@
     <div class="brand">Heck<span>Yeah</span></div>
     <div id="headsub" class="headsub">Free media, everywhere</div>
   </div>
+  <div id="updbanner" class="updbanner" style="display:none">
+    <span id="updtext" class="updtext"></span>
+    <button id="upddl" class="upddl">Download</button>
+    <button id="updx" class="updx" aria-label="Dismiss update notice">✕</button>
+  </div>
   <div id="view"><div class="loading">Loading…</div></div>
   <div class="foot">
     <button id="openapp" class="footbtn">Open full app ↗</button>
-    <button id="airplay" class="footbtn"></button>
+  </div>
+  <div class="updfoot">
+    <button id="updcheck" class="footbtn updcheck">Check for updates</button>
+    <span id="updstatus" class="updstatus"></span>
   </div>
 </div>
 <script src="common.js"></script>
+<script src="update-check.js"></script>
 <script src="popup.js"></script>
 </body>
 </html>

@@ -1,0 +1,12 @@
+{
+  "addons": {
+    "orion-beautiful-reader@local": {
+      "updates": [
+        {
+          "version": "1.18.0",
+          "update_link": "https://muse.ai/files/665768643292256/1464940189103567/5s2dnqxxgon9l5yswbdclfsu/beautiful-reader-orion-1.18.0.xpi"
+        }
+      ]
+    }
+  }
+}

@@ -1,4 +1,74 @@
-# Beautiful Reader for Orion — v1.16.2
+# Beautiful Reader for Orion — v1.18.0
+
+## What's new in v1.18.0
+
+**Custom graphics survive the reader.** Article charts and
+interactives that sites draw themselves — the kind that used
+to vanish without a trace — are now lifted, in this order:
+
+1. **Live embeds.** A sizeable iframe inside the article
+   (WSJ/Media graphics, Datawrapper, Flourish, Infogram and
+   kin, plus any other big in-article frame that isn't an
+   ad) is carried into the reader at its own aspect ratio,
+   sandboxed but script-enabled — so a working embed keeps
+   its interactivity. Video and social embeds behave exactly
+   as before.
+2. **Frozen snapshots.** An inline graphic the page already
+   rendered (SVG / canvas / styled-div charts) is frozen into
+   a self-contained snapshot: scripts, handlers and ids
+   stripped, computed styles inlined, canvases flattened to
+   images. No interactivity, but the graphic is *there*,
+   drawn the way the page drew it.
+
+Guards keep the lift honest: prose sections that merely
+contain a chart are still walked as text, link-heavy
+related-story modules are never frozen, ad iframes are
+rejected by host, and snapshots are capped in size. Text
+Only mode hides graphics like it hides images.
+
+## What's new in v1.17.0
+
+**The extension can now check for updates.** A new
+`update-check.js` polls a Firefox-style update feed
+(`updates.json` in the Orion-Extensions repo), compares the
+highest version there against the installed one, and — when
+something newer exists — shows an "Update available: v…"
+notice with a Download button in the popup's new Updates
+section, plus a one-line entry at the end of the reader's
+⚙ menu. A manual **Check for updates** button lives in the
+popup → Updates. See the "Updates" section below for how it
+works and its one big caveat (the private feed).
+
+## Updates
+
+Beautiful Reader checks for newer versions itself:
+
+- **What it does:** on popup open (and at background
+  startup, throttled to at most one fetch per 12 hours) it
+  fetches the update feed, and if the feed's highest version
+  for `orion-beautiful-reader@local` is newer than the
+  installed version, it records the find. The popup's
+  Updates section then shows the notice (dismissible per
+  version) and the reader menu gains an "Update available"
+  row. Download opens the new `.xpi` link in a tab.
+- **What it cannot do:** install the update. No
+  WebExtension API lets an extension replace itself, so —
+  as always — you install the downloaded file in Orion
+  (Extensions → + → Install from File), removing the old
+  version first.
+- **Manual check:** popup → **Updates** → **Check for
+  updates**. It reports honestly: "You're on the latest
+  version", "Update available: v…", or "Couldn't check for
+  updates (feed unreachable)".
+- **Caveat — the feed is private today:** the default feed
+  is `updates.json` in the private `kcm2019/Orion-Extensions`
+  GitHub repo, so an unauthenticated fetch from the
+  extension may 404. Auto checks then fail silently (and
+  never clear a previously found update); a manual check
+  tells you the feed was unreachable rather than claiming
+  you're up to date. The feed URL can be overridden via
+  the `upd_feed_url` storage key if it ever moves to a
+  public host.
 
 ## What's new in v1.16.2
 

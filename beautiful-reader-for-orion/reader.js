@@ -117,6 +117,8 @@
     '.br-hero video{width:100%;height:auto;border-radius:14px;display:block;background:#000;box-shadow:0 14px 38px rgba(0,0,0,.22),0 3px 10px rgba(0,0,0,.14)}',
     '.br-body video{width:100%;height:auto;border-radius:12px;display:block;background:#000;box-shadow:0 12px 32px rgba(0,0,0,.20),0 2px 8px rgba(0,0,0,.12)}',
     '.br-embed{position:relative;width:100%;padding-top:56.25%;border-radius:12px;overflow:hidden;background:#000;box-shadow:0 12px 32px rgba(0,0,0,.20),0 2px 8px rgba(0,0,0,.12)}',
+    '.br-graphic{margin:1.6em 0;overflow:hidden;border-radius:10px}',
+    '.br-graphic img,.br-graphic svg,.br-graphic canvas{max-width:100%}',
     '.br-embed iframe{position:absolute;inset:0;width:100%;height:100%;border:0}',
     '#br-reader.br-bar-bottom .br-topbar{top:auto;bottom:0;border-bottom:0;border-top:1px solid var(--br-faint);padding-bottom:calc(10px + env(safe-area-inset-bottom,0px))}',
     '#br-reader.br-bar-bottom .br-sheet{top:auto;bottom:calc(env(safe-area-inset-bottom,0px) + 68px);transform-origin:bottom right;transform:scale(.9) translateY(10px)}',
@@ -542,6 +544,10 @@
           if (capT && capT.length <= 400 && !C.looksLikeFilename(capT)) { lastB.caption = capT; continue; }
         }
       }
+      // Custom graphics (v1.18.0): a chart / interactive the
+      // page drew itself — try to lift it before the generic
+      // walk can scatter its labels or drop it whole.
+      if (tryGraphic(child, blocks, seen, baseUrl)) continue;
       var tag = child.tagName.toLowerCase();
       if (/^h[1-6]$/.test(tag)) {
         var ht = cleanText(textOfExcludingSkips(child));
@@ -619,6 +625,12 @@
         } else if (isrc && /(youtube\.com\/embed|youtu\.be|player\.vimeo\.com|dailymotion\.com\/embed|player\.twitch\.tv|player\.brightcove\.net)/i.test(isrc) && !seen['emb:' + isrc]) {
           seen['emb:' + isrc] = 1;
           blocks.push({ type: 'embed', src: isrc });
+        } else if (isrc && !seen['emb:' + isrc] && graphicEmbedOk(child, isrc)) {
+          // A chart embed (WSJ graphics, Datawrapper, Flourish…):
+          // carried in LIVE, at its own aspect — interactivity
+          // survives whenever the embed works standalone.
+          seen['emb:' + isrc] = 1;
+          blocks.push({ type: 'embed', src: isrc, graphic: true, w: embedDim(child, 'width'), h: embedDim(child, 'height') });
         }
       } else if (tag === 'pre') {
         var code = String(child.textContent || '').replace(/\s+$/, '');
@@ -671,6 +683,168 @@
       }
     } catch (e) {}
     return false;
+  }
+
+  // ---------- custom graphics (v1.18.0) ----------
+  // Sites draw their own chart elements the text walk cannot
+  // read. Two lifts, in order: (1) an iframe graphic goes in
+  // LIVE as an embed block; (2) an inline graphic (SVG /
+  // canvas / styled divs the page already rendered) is frozen
+  // into a static snapshot — scripts stripped, computed styles
+  // inlined, canvases flattened to images — so it can at
+  // least be SEEN in the reader, exactly as the page drew it.
+
+  function embedDim(iframe, which) {
+    var a = parseInt(iframe.getAttribute(which) || '', 10);
+    if (a > 0) return a;
+    try {
+      var r = iframe.getBoundingClientRect();
+      var v = which === 'width' ? r.width : r.height;
+      if (v > 0) return Math.round(v);
+    } catch (e) {}
+    return 0;
+  }
+
+  var GRAPHIC_EMBED_RE = /(datawrapper|dwcdn|flourish|infogram|observablehq|amcharts|highcharts|interactive\.guim|apps\.npr\.org|graphics\.reuters|reuters\.com\/graphics|wsj\.com\/media|wsj\.net\/media|graphics\.wsj|bloomberg\.com\/graphics|ft\.com\/__origami|ig\.ft\.com|bbc\.com\/ws\/includes|apnews\.com\/.*interactive)/i;
+  var AD_EMBED_RE = /(doubleclick|googlesyndication|amazon-adsystem|adsystem|taboola|outbrain|error-report|getadmiral|admiral\.|criteo|pubmatic|rubicon|sharethrough|teads|smartadserver)/i;
+
+  function graphicEmbedOk(iframe, src) {
+    if (AD_EMBED_RE.test(src)) return false;
+    if (GRAPHIC_EMBED_RE.test(src)) return true;
+    // Any other sizeable iframe inside the article body is
+    // content far more often than not (videos and social are
+    // already claimed above; ad wrappers are skipped whole).
+    var w = embedDim(iframe, 'width'), h = embedDim(iframe, 'height');
+    return w >= 280 && h >= 140;
+  }
+
+  function graphicCandidate(node) {
+    var tag = node.tagName.toLowerCase();
+    if (tag === 'iframe' || tag === 'img' || tag === 'table' || tag === 'ul' || tag === 'ol' || tag === 'p' || tag === 'blockquote' || tag === 'video' || tag === 'pre' || tag === 'hr' || tag === 'a') return false;
+    if (!node.querySelector) return false;
+    var hasSvgCanvas = !!node.querySelector('svg, canvas');
+    var marked = /(chart|graphic|viz|dataviz|ai2html|interactive|infographic)/i.test(String(node.className || '') + ' ' + (node.id || ''));
+    if (!hasSvgCanvas && !marked) return false;
+    if (visuallyHidden(node)) return false;
+    var rect;
+    try { rect = node.getBoundingClientRect(); } catch (e) { return false; }
+    if (!rect || rect.width < 240 || rect.height < 100) return false;
+    if (node.querySelectorAll('*').length > 600) return false;
+    // Prose guard: real paragraphs inside mean this is an
+    // article section that happens to hold a chart — walk it
+    // normally and let the chart be reached on its own level.
+    var prose = 0;
+    var ps = node.querySelectorAll('p, li');
+    for (var i = 0; i < ps.length; i++) {
+      var t = cleanText(ps[i].textContent);
+      if (t.length >= 50) prose += t.length;
+    }
+    if (prose >= 120) return false;
+    // Link guard: link-heavy subtrees are related-story and
+    // promo modules, not charts.
+    var links = node.querySelectorAll('a[href]');
+    if (links.length >= 3) {
+      var lt = 0;
+      for (var j = 0; j < links.length; j++) lt += cleanText(links[j].textContent).length;
+      var all = cleanText(node.textContent).length;
+      if (all && lt / all > 0.4) return false;
+    }
+    return true;
+  }
+
+  var FREEZE_PROPS = ('display,position,left,right,top,bottom,width,height,min-width,max-width,min-height,max-height,' +
+    'margin-top,margin-right,margin-bottom,margin-left,padding-top,padding-right,padding-bottom,padding-left,' +
+    'background-color,background-image,background-size,background-position,background-repeat,color,font-family,font-size,' +
+    'font-weight,font-style,line-height,letter-spacing,text-align,text-transform,white-space,vertical-align,' +
+    'border-top-width,border-right-width,border-bottom-width,border-left-width,border-top-style,border-right-style,' +
+    'border-bottom-style,border-left-style,border-top-color,border-right-color,border-bottom-color,border-left-color,' +
+    'border-top-left-radius,border-top-right-radius,border-bottom-left-radius,border-bottom-right-radius,' +
+    'flex-direction,flex-wrap,justify-content,align-items,align-content,gap,grid-template-columns,grid-template-rows,' +
+    'grid-column,grid-row,flex-grow,flex-shrink,flex-basis,transform,opacity,overflow,overflow-x,overflow-y,' +
+    'visibility,z-index,float,clear,box-sizing,object-fit,text-indent,list-style-type,box-shadow').split(',');
+
+  function absolutizeBg(value, baseUrl) {
+    if (!value || value.indexOf('url(') < 0) return value;
+    return value.replace(/url\((['"]?)(.*?)\1\)/g, function (m, q, u) {
+      try { return 'url("' + new URL(u, baseUrl).href + '")'; } catch (e) { return m; }
+    });
+  }
+
+  // Freeze a rendered graphic into self-contained HTML.
+  // Returns null when anything about it is unsafe or huge.
+  function freezeGraphic(node, baseUrl) {
+    try {
+      if (!window.getComputedStyle) return null;
+      var clone = node.cloneNode(true);
+      var orig = [node].concat(Array.prototype.slice.call(node.querySelectorAll('*')));
+      var copy = [clone].concat(Array.prototype.slice.call(clone.querySelectorAll('*')));
+      if (copy.length !== orig.length || copy.length > 601) return null;
+      var removals = [];
+      for (var i = 0; i < orig.length; i++) {
+        var oe = orig[i], ce = copy[i];
+        var tag = oe.tagName.toLowerCase();
+        if (tag === 'script' || tag === 'iframe' || tag === 'form' || tag === 'object' || tag === 'embed' ||
+            tag === 'link' || tag === 'meta' || tag === 'noscript' || tag === 'template' || tag === 'style' ||
+            tag === 'input' || tag === 'select' || tag === 'textarea' || tag === 'button') { removals.push(ce); continue; }
+        if (tag === 'canvas' || (tag === 'video' && oe.getAttribute('poster'))) {
+          var flat = null;
+          try { flat = tag === 'canvas' ? oe.toDataURL('image/png') : C.sanitizeUrl(oe.getAttribute('poster'), baseUrl); } catch (e) { flat = null; }
+          var im = document.createElement('img');
+          if (flat) im.src = flat;
+          im.alt = '';
+          ce.parentNode.replaceChild(im, ce);
+          copy[i] = im; ce = im;
+        } else if (tag === 'video') { removals.push(ce); continue; }
+        // Strip ids (the page below is alive — no duplicates)
+        // and every event handler / navigation attribute.
+        ce.removeAttribute('id');
+        var attrs = ce.attributes ? Array.prototype.slice.call(ce.attributes) : [];
+        for (var a = 0; a < attrs.length; a++) {
+          var an = attrs[a].name.toLowerCase();
+          if (an.indexOf('on') === 0 || an === 'href' || an === 'srcdoc' || an === 'xlink:href' || an === 'action') ce.removeAttribute(attrs[a].name);
+        }
+        if (tag === 'img') {
+          var isrc = C.sanitizeUrl(oe.getAttribute('src') || oe.getAttribute('data-src') || '', baseUrl);
+          if (isrc) ce.setAttribute('src', isrc);
+          ce.removeAttribute('srcset'); ce.removeAttribute('sizes');
+        }
+        var cs = window.getComputedStyle(oe);
+        if (cs) {
+          for (var p = 0; p < FREEZE_PROPS.length; p++) {
+            var v = cs.getPropertyValue(FREEZE_PROPS[p]);
+            if (v) { try { ce.style.setProperty(FREEZE_PROPS[p], FREEZE_PROPS[p] === 'background-image' ? absolutizeBg(v, baseUrl) : v); } catch (e) {} }
+          }
+        }
+      }
+      for (var r = 0; r < removals.length; r++) { if (removals[r].parentNode) removals[r].parentNode.removeChild(removals[r]); }
+      if (clone.style) {
+        if (clone.style.position === 'absolute' || clone.style.position === 'fixed') clone.style.position = 'relative';
+        clone.style.maxWidth = '100%';
+        clone.style.marginLeft = 'auto';
+        clone.style.marginRight = 'auto';
+      }
+      var html = clone.outerHTML;
+      if (!html || html.length > 150000) return null;
+      return html;
+    } catch (e) { return null; }
+  }
+
+  function graphicHash(s) {
+    var h = 0;
+    for (var i = 0; i < s.length; i++) { h = ((h << 5) - h + s.charCodeAt(i)) | 0; }
+    return 'gfx' + (h >>> 0).toString(36) + '-' + s.length;
+  }
+
+  function tryGraphic(child, blocks, seen, baseUrl) {
+    if (!graphicCandidate(child)) return false;
+    var html = freezeGraphic(child, baseUrl);
+    if (!html) return false;
+    var key = 'gfx:' + graphicHash(html);
+    if (seen[key]) return true;
+    seen[key] = 1;
+    var rect = child.getBoundingClientRect();
+    blocks.push({ type: 'graphic', html: html, w: Math.round(rect.width), h: Math.round(rect.height) });
+    return true;
   }
 
   function pushImage(img, blocks, baseUrl, caption) {
@@ -1178,7 +1352,7 @@
   function renderBlocksInto(container, blocks, headingRegistry, byline) {
     var textOnly = !!eff().textOnly;
     blocks.forEach(function (b) {
-      if (textOnly && (b.type === 'image' || b.type === 'video' || b.type === 'embed' || b.type === 'social')) return;
+      if (textOnly && (b.type === 'image' || b.type === 'video' || b.type === 'embed' || b.type === 'social' || b.type === 'graphic')) return;
       var n = null;
       if (b.type === 'heading') {
         n = el('h' + Math.min(6, Math.max(2, b.level || 2)), '', b.text);
@@ -1216,8 +1390,22 @@
         ifr.src = b.src; ifr.setAttribute('allowfullscreen', '');
         ifr.setAttribute('allow', 'autoplay; fullscreen; picture-in-picture; encrypted-media');
         ifr.loading = 'lazy';
+        if (b.graphic) {
+          // Chart embeds keep their own aspect and run
+          // sandboxed (v1.18.0) — scripts yes, top navigation
+          // and downloads no.
+          ifr.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups');
+          if (b.w > 0 && b.h > 0) ew.style.paddingTop = (b.h / b.w * 100).toFixed(2) + '%';
+        }
         ew.appendChild(ifr);
         n = ew;
+      }
+      else if (b.type === 'graphic') {
+        // Frozen snapshot of a graphic the page drew itself:
+        // self-contained HTML with inlined styles (v1.18.0).
+        var gw = el('div', 'br-graphic');
+        gw.innerHTML = b.html;
+        n = gw;
       }
       else if (b.type === 'quote') {
         n = el('blockquote', b.pull ? 'br-pull' : '', b.text);
@@ -1458,6 +1646,8 @@
     if (b.type === 'image') return 'i:' + C.imageIdentity(b.src);
     if (b.type === 'paragraph') return 'p:' + b.text.slice(0, 60);
     if (b.type === 'heading') return 'h:' + b.text.slice(0, 60);
+    if (b.type === 'embed') return 'e:' + b.src;
+    if (b.type === 'graphic') return 'g:' + graphicHash(b.html || '');
     return '';
   }
   function insertLateImages(newBlocks) {
@@ -2624,6 +2814,26 @@
       menuRow(sheet, { icon: '⤓', label: 'Export Markdown (.md)', onClick: function () { closeSheet(); exportCurrent(); } });
       menuRow(sheet, { icon: '⤓', label: 'Export PDF (with images)', onClick: function () { closeSheet(); exportPdf(); } });
       menuRow(sheet, { icon: '⎘', label: 'Copy Extraction Report', onClick: function () { closeSheet(); copyExtractionReport(); } });
+      // Update notice (v1.17.0): one row, only when the update
+      // checker (update-check.js, via the popup/background) has
+      // a find that wasn't dismissed. Async: the row lands at
+      // the end of the sheet when storage answers, and only if
+      // this sheet is still the open one.
+      try {
+        var updSheet = sheet;
+        Promise.all([storageGet('upd_available', null), storageGet('upd_dismissed', '')]).then(function (vals) {
+          var av = vals[0];
+          if (!av || !av.version || !av.update_link) return;
+          if (vals[1] && vals[1] === av.version) return;
+          if (S.sheet !== updSheet || !updSheet.classList.contains('br-on')) return;
+          if (updSheet.querySelector('.br-upd-row')) return;
+          var updRow = menuRow(updSheet, {
+            icon: '⬆', label: 'Update available: v' + av.version,
+            onClick: function () { try { window.open(av.update_link, '_blank'); } catch (e) {} }
+          });
+          updRow.classList.add('br-upd-row');
+        }).catch(function () {});
+      } catch (e) {}
 
       // Collapsible setting categories — tap a header to expand/collapse.
       if (!S.openSections) S.openSections = { site: true, appearance: true, text: false, layout: false, listen: false };

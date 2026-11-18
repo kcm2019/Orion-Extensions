@@ -48,6 +48,8 @@
   .art .bar i { display:block; height:100%; background:var(--accent); border-radius:2px; }
   .art .done { color:#34C759; font-weight:600; }
   footer { color:var(--sub); font-size:12px; line-height:1.45; padding:2px 18px 14px; }
+  #sec-updates .row.upd-new { background:rgba(10,132,255,.12); }
+  button.ghost { background:rgba(120,120,128,.18); color:inherit; }
 </style>
 </head>
 <body>
@@ -103,6 +105,20 @@
   <div class="row"><div class="grow dim">Breaks anti-adblock walls on pages — overlays, “allow ads” dialogs, forced redirects and page blanking — whether or not the reader is open.</div></div>
 </section>
 
+<section id="sec-updates">
+  <h2>Updates</h2>
+  <div class="row upd-new" id="upd-notice" hidden>
+    <div class="grow"><div class="host" id="upd-notice-text">Update available</div></div>
+    <button id="upd-download">Download</button>
+    <button id="upd-dismiss" class="plain" title="Dismiss this update">✕</button>
+  </div>
+  <div class="row">
+    <div class="grow">Version <span id="upd-version">—</span></div>
+    <button id="upd-check" class="ghost">Check for updates</button>
+  </div>
+  <div class="note" id="upd-status">Checks the Orion-Extensions update feed. Updates install from file in Orion, as usual.</div>
+</section>
+
 <footer>These are the global defaults. Inside the reader, the ⚙ menu can still override them for the site you're reading.</footer>
 </div>
 
@@ -135,6 +151,7 @@
 </div>
 
 <script src="reader-core.js"></script>
+<script src="update-check.js"></script>
 <script src="popup.js"></script>
 </body>
 </html>

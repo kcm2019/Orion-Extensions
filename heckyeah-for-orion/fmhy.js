@@ -576,7 +576,7 @@
       }
 
       var diag = el('div', 'hyo-diag',
-        'HeckYeah for Orion 0.12.1 \u00b7 storage: ' + store.storageMode +
+        'HeckYeah for Orion 0.12.2 \u00b7 storage: ' + store.storageMode +
         ' \u00b7 visits ' + store.visits +
         ' \u00b7 tracked ' + store.entries.length +
         ' \u00b7 sweep removals ' + (store.sweepCount || 0));

@@ -1,3 +1,15 @@
+# HeckYeah for Orion — v0.12.2
+
+Popup reverted (Kurt's request): the extension menu is back to
+the v0.11.0 layout — Continue Watching + the 12-category grid
+with tap-through category shelves and the back button. The
+v0.12.0 popup changes (streaming-only popup home, star toggles
+and drag-reorder in the popup) are undone; those features remain
+in the in-page app view, which is unchanged. The AirPlay toggle
+does NOT return — that feature stays removed everywhere. The
+v0.12.1 storage hardening and the instrumented popup boot are
+kept (they're also what the reverted popup boots through).
+
 # HeckYeah for Orion — v0.12.1
 
 Popup hang fix. On-device the toolbar popup sat on "Loading…"

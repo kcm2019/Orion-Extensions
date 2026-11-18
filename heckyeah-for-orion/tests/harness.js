@@ -377,8 +377,8 @@ function test(name, fn) {
     const pop = fs.readFileSync(__dirname + '/../popup.js', 'utf8');
     assert.ok(pop.includes('tabs.create'), 'sites open in tabs');
     assert.ok(pop.includes('store.armed[host]'), 'launches arm the tracker like the app view');
-    assert.ok(pop.includes('fmhy.net/video'), 'popup home is the streaming shelves');
-    assert.ok(!pop.includes('SEED_CATS'), 'category grid gone from the popup');
+    assert.ok(pop.includes('VPFeature'), 'categories parsed live from fmhy');
+    assert.ok(pop.includes('SEED_CATS'), 'popup home is Continue + categories (reverted in 0.12.2)');
     assert.ok(pop.includes('parseCategory'), 'shelves parsed in the popup');
     assert.ok(pop.includes('groupByShow'), 'continue watching grouped like the app');
   });
@@ -413,8 +413,8 @@ function test(name, fn) {
     assert.ok(fmhy.includes('store.siteOrder[key]'), 'order saved per shelf');
     assert.ok(fmhy.includes('isVideo || isHome'), 'arming covers home shelves');
     const pop = fs.readFileSync(__dirname + '/../popup.js', 'utf8');
-    assert.ok(pop.includes('attachPopDrag'), 'drag reorder in the popup too');
-    assert.ok(pop.includes('renderPopShelves'), 'popup renders streaming shelves');
+    assert.ok(!pop.includes('attachPopDrag'), 'popup drag reorder reverted (0.12.2) — app view only');
+    assert.ok(!pop.includes('renderPopShelves'), 'popup streaming-only home reverted (0.12.2)');
   });
 
   await test('update checker: wired into app view + popup, not the tracker', () => {
@@ -446,9 +446,9 @@ function test(name, fn) {
     assert.ok(pop.includes('bootFail'), 'popup renders boot failures instead of hanging');
   });
 
-  await test('manifest parses, version 0.12.1, files exist', () => {
+  await test('manifest parses, version 0.12.2, files exist', () => {
     const m = JSON.parse(fs.readFileSync(__dirname + '/../manifest.json', 'utf8'));
-    assert.strictEqual(m.version, '0.12.1');
+    assert.strictEqual(m.version, '0.12.2');
     assert.strictEqual(m.manifest_version, 2);
     m.content_scripts.forEach((cs) => {
       (cs.js || []).forEach((f) => assert.ok(fs.existsSync(__dirname + '/../' + f), f));

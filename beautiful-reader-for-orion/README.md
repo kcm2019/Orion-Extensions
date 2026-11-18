@@ -1,132 +1,14 @@
-# Beautiful Reader for Orion — v1.18.2
+# Beautiful Reader for Orion — v1.18.3
 
-## What's new in v1.18.2
+## What's new in v1.18.3
 
-**The chart was never freezing whole — now it can.** A
-live inspection of the WSJ "Supply Chain Strain" chart
-settled what it actually is: plain styled `<div>`s — no
-SVG, no canvas, no image. The v1.18 detector required a
-media element or a lucky class name, so the walk took the
-chart apart instead: its title became a reader heading,
-its legend became stray text lines, and only a fragment
-froze. Three fixes:
-
-- **Painted-geometry detection.** A container now also
-  qualifies as a chart when it holds several solid-colour
-  boxes of real size (bar segments, chips) while staying
-  label-short on text — the signature of a div-built
-  chart. The prose and link guards still keep sections
-  and related-story modules out.
-- **Sizes are layout sizes.** The stored natural size is
-  the element's offset size, not its on-screen rect — a
-  page that scales its own chart wrapper no longer makes
-  the reader's scaler shrink by the same factor twice,
-  and the frozen root's own transform is stripped (the
-  scaler replaces it).
-- **Opacity is copied faithfully.** The v1.18.1
-  snap-to-full-opacity is gone: WSJ keeps its small-segment
-  labels (1.5%, 3.5%, 2%) invisible until hover BY DESIGN,
-  and the snap was painting them all at once.
-
-## What's new in v1.18.1
-
-**Graphics fit the column, and freeze more faithfully.**
-Field reports from the CNN election card and the WSJ
-"Supply Chain Strain" chart:
-
-- **Scale-to-fit.** A frozen snapshot keeps the pixel
-  layout the page gave it (often a ~700px desktop card) —
-  in a ~360px reading column that simply clipped. The
-  snapshot now renders inside a scaler: natural layout
-  preserved, the whole coordinate system shrunk to the
-  column with a transform, centred, wrapper height set to
-  the scaled height. Re-fits on rotation/resize.
-- **Pseudo-elements materialize.** Legend chips and other
-  ::before / ::after paint existed only in the page's
-  stylesheet and vanished in the clone; when a pseudo
-  actually paints, it becomes a real span with its computed
-  style.
-- **The page's ground comes along.** A transparent chart
-  borrowed the page's background; in a dark reader theme
-  that inverted the design (dark text on the theme's black,
-  or white text with nothing behind it). The snapshot now
-  carries the effective background it sat on.
-- **No more half-faded freezes.** A graphic caught
-  mid-entrance-animation froze at partial opacity; HTML
-  elements now snap to their finished opacity (SVG
-  internals keep theirs).
-- Chart embeds sit on white instead of the video embed's
-  black.
-
-## What's new in v1.18.0
-
-**Custom graphics survive the reader.** Article charts and
-interactives that sites draw themselves — the kind that used
-to vanish without a trace — are now lifted, in this order:
-
-1. **Live embeds.** A sizeable iframe inside the article
-   (WSJ/Media graphics, Datawrapper, Flourish, Infogram and
-   kin, plus any other big in-article frame that isn't an
-   ad) is carried into the reader at its own aspect ratio,
-   sandboxed but script-enabled — so a working embed keeps
-   its interactivity. Video and social embeds behave exactly
-   as before.
-2. **Frozen snapshots.** An inline graphic the page already
-   rendered (SVG / canvas / styled-div charts) is frozen into
-   a self-contained snapshot: scripts, handlers and ids
-   stripped, computed styles inlined, canvases flattened to
-   images. No interactivity, but the graphic is *there*,
-   drawn the way the page drew it.
-
-Guards keep the lift honest: prose sections that merely
-contain a chart are still walked as text, link-heavy
-related-story modules are never frozen, ad iframes are
-rejected by host, and snapshots are capped in size. Text
-Only mode hides graphics like it hides images.
-
-## What's new in v1.17.0
-
-**The extension can now check for updates.** A new
-`update-check.js` polls a Firefox-style update feed
-(`updates.json` in the Orion-Extensions repo), compares the
-highest version there against the installed one, and — when
-something newer exists — shows an "Update available: v…"
-notice with a Download button in the popup's new Updates
-section, plus a one-line entry at the end of the reader's
-⚙ menu. A manual **Check for updates** button lives in the
-popup → Updates. See the "Updates" section below for how it
-works and its one big caveat (the private feed).
-
-## Updates
-
-Beautiful Reader checks for newer versions itself:
-
-- **What it does:** on popup open (and at background
-  startup, throttled to at most one fetch per 12 hours) it
-  fetches the update feed, and if the feed's highest version
-  for `orion-beautiful-reader@local` is newer than the
-  installed version, it records the find. The popup's
-  Updates section then shows the notice (dismissible per
-  version) and the reader menu gains an "Update available"
-  row. Download opens the new `.xpi` link in a tab.
-- **What it cannot do:** install the update. No
-  WebExtension API lets an extension replace itself, so —
-  as always — you install the downloaded file in Orion
-  (Extensions → + → Install from File), removing the old
-  version first.
-- **Manual check:** popup → **Updates** → **Check for
-  updates**. It reports honestly: "You're on the latest
-  version", "Update available: v…", or "Couldn't check for
-  updates (feed unreachable)".
-- **Caveat — the feed is private today:** the default feed
-  is `updates.json` in the private `kcm2019/Orion-Extensions`
-  GitHub repo, so an unauthenticated fetch from the
-  extension may 404. Auto checks then fail silently (and
-  never clear a previously found update); a manual check
-  tells you the feed was unreachable rather than claiming
-  you're up to date. The feed URL can be overridden via
-  the `upd_feed_url` storage key if it ever moves to a
-  public host.
+**Full revert to the v1.16.2 build.** The custom-graphics
+experiment (v1.18.0–v1.18.2: live embeds, frozen snapshots,
+scale-to-fit, div-chart detection) is scrapped, and the
+v1.17.0 update checker goes with it, since both arrived
+after v1.16.2. The reader code is byte-identical to the
+v1.16.2 package; the version number is higher only so
+Orion accepts the install over the newer builds.
 
 ## What's new in v1.16.2
 

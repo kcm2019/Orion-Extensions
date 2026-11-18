@@ -42,7 +42,7 @@
     "webRequest",
     "webRequestBlocking"
   ],
-  "version": "1.18.2",
+  "version": "1.18.3",
   "browser_action": {
     "default_title": "Beautiful Reader",
     "default_popup": "popup.html",
@@ -53,8 +53,7 @@
   },
   "background": {
     "scripts": [
-      "br-background.js",
-      "update-check.js"
+      "br-background.js"
     ]
   },
   "web_accessible_resources": [

@@ -327,75 +327,6 @@
     renderHistory();
   }
 
-  /* ---------- updates (v1.17.0, update-check.js) ---------- */
-  var U = window.BRUpdate || null;
-  var updState = { available: null, dismissed: '' };
-  function renderUpdates() {
-    if (!U) return;
-    el('upd-version').textContent = 'v' + U.currentVersion();
-    var av = updState.available;
-    var show = !!(av && av.version && av.version !== updState.dismissed);
-    el('upd-notice').hidden = !show;
-    if (show) el('upd-notice-text').textContent = 'Update available: v' + av.version;
-  }
-  function updStatus(text) { el('upd-status').textContent = text; }
-  function applyCheckResult(r, manual) {
-    if (!U || !r) return;
-    if (r.state === 'update') {
-      updState.available = { version: r.version, update_link: r.update_link || '' };
-      renderUpdates();
-      updStatus('Update available: v' + r.version + ' — tap Download, then install from file in Orion.');
-    } else if (manual && r.state === 'current') {
-      updState.available = null;
-      renderUpdates();
-      updStatus("You're on the latest version (v" + U.currentVersion() + ').');
-    } else if (manual && r.state === 'error') {
-      updStatus("Couldn't check for updates (feed unreachable).");
-    }
-  }
-  function wireUpdates() {
-    if (!U) { var sec = el('sec-updates'); if (sec) sec.hidden = true; return; }
-    el('upd-version').textContent = 'v' + U.currentVersion();
-    el('upd-check').addEventListener('click', function () {
-      var btn = el('upd-check');
-      btn.disabled = true;
-      updStatus('Checking…');
-      U.checkNow(true).then(function (r) { btn.disabled = false; applyCheckResult(r, true); });
-    });
-    el('upd-download').addEventListener('click', function () {
-      if (updState.available) U.openUpdate(updState.available.update_link);
-    });
-    el('upd-dismiss').addEventListener('click', function () {
-      if (!updState.available) return;
-      updState.dismissed = updState.available.version;
-      U.dismissUpdate(updState.available.version);
-      renderUpdates();
-    });
-    U.getState().then(function (st) {
-      updState.available = st.available;
-      updState.dismissed = st.dismissed;
-      renderUpdates();
-      // Auto check when the popup opens — throttled inside
-      // checkNow, so this fetches at most once per 12 h.
-      // Re-sync from storage afterwards: a check that was
-      // already in flight (background startup) may have
-      // stored its find after our first read.
-      U.checkNow(false).then(function (r) {
-        applyCheckResult(r, false);
-        return U.getState();
-      }).then(function (st2) {
-        if (st2 && st2.available) {
-          updState.available = st2.available;
-          updState.dismissed = st2.dismissed;
-          renderUpdates();
-          if (st2.available.version !== st2.dismissed) {
-            updStatus('Update available: v' + st2.available.version + ' — tap Download, then install from file in Orion.');
-          }
-        }
-      });
-    });
-  }
-
   function wireTabs() {
     var btns = document.querySelectorAll('#tabs button');
     btns.forEach(function (b) {
@@ -460,7 +391,6 @@
       P.history = Array.isArray(vals[4]) ? vals[4] : [];
       wire();
       wireTabs();
-      wireUpdates();
       queryReaderState();
       renderSites();
       renderDefaults();

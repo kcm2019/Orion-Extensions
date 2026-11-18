@@ -720,21 +720,51 @@
     return w >= 280 && h >= 140;
   }
 
+  // Painted geometry: the signature of a pure-div chart
+  // (WSJ/Datawrapper-style) — several solid-colour boxes of
+  // real size (bar segments, legend chips) inside one
+  // container. Text and structure alone can't tell it from
+  // prose; painted area can.
+  function paintedGeometry(node) {
+    try {
+      if (!window.getComputedStyle) return false;
+      var els = node.querySelectorAll('*');
+      var painted = 0;
+      var limit = Math.min(els.length, 160);
+      for (var i = 0; i < limit; i++) {
+        var e = els[i];
+        if (e.namespaceURI && e.namespaceURI.indexOf('svg') >= 0) continue;
+        var w = e.offsetWidth || 0, h = e.offsetHeight || 0;
+        if (w < 30 || h < 6 || w * h < 300) continue;
+        var bg = window.getComputedStyle(e).getPropertyValue('background-color');
+        if (bg && bg !== 'transparent' && !/rgba\([^)]*,\s*0\)$/.test(bg)) {
+          painted++;
+          if (painted >= 4) return true;
+        }
+      }
+    } catch (e) {}
+    return false;
+  }
+
   function graphicCandidate(node) {
     var tag = node.tagName.toLowerCase();
     if (tag === 'iframe' || tag === 'img' || tag === 'table' || tag === 'ul' || tag === 'ol' || tag === 'p' || tag === 'blockquote' || tag === 'video' || tag === 'pre' || tag === 'hr' || tag === 'a') return false;
     if (!node.querySelector) return false;
-    var hasSvgCanvas = !!node.querySelector('svg, canvas');
-    var marked = /(chart|graphic|viz|dataviz|ai2html|interactive|infographic)/i.test(String(node.className || '') + ' ' + (node.id || ''));
-    if (!hasSvgCanvas && !marked) return false;
     if (visuallyHidden(node)) return false;
+    // Size by layout size (offset*), not the visual rect: a
+    // page may scale its chart wrapper with a transform, and
+    // the clone reproduces the UNSCALED layout.
     var rect;
     try { rect = node.getBoundingClientRect(); } catch (e) { return false; }
-    if (!rect || rect.width < 240 || rect.height < 100) return false;
-    if (node.querySelectorAll('*').length > 600) return false;
-    // Prose guard: real paragraphs inside mean this is an
-    // article section that happens to hold a chart — walk it
-    // normally and let the chart be reached on its own level.
+    var w = node.offsetWidth || (rect ? rect.width : 0);
+    var h = node.offsetHeight || (rect ? rect.height : 0);
+    if (w < 240 || h < 80) return false;
+    var desc = node.querySelectorAll('*').length;
+    if (desc < 8 || desc > 600) return false;
+    // Charts are labels, not prose: cap the total text and
+    // apply the paragraph guard (a section that merely
+    // CONTAINS a chart is walked as text instead).
+    if (cleanText(node.textContent).length > 900) return false;
     var prose = 0;
     var ps = node.querySelectorAll('p, li');
     for (var i = 0; i < ps.length; i++) {
@@ -751,7 +781,16 @@
       var all = cleanText(node.textContent).length;
       if (all && lt / all > 0.4) return false;
     }
-    return true;
+    // Things with their own block types stay on their paths.
+    if (node.querySelector('table, form, video')) return false;
+    var bigImg = node.querySelector('img');
+    if (bigImg && (bigImg.offsetWidth || 0) >= 200 && (bigImg.offsetHeight || 0) >= 120) return false;
+    var hasSvgCanvas = !!node.querySelector('svg, canvas');
+    var marked = /(chart|graphic|viz|dataviz|ai2html|interactive|infographic)/i.test(String(node.className || '') + ' ' + (node.id || ''));
+    if (hasSvgCanvas || marked) return true;
+    // The v1.18.2 case: a chart built from styled divs alone
+    // (the WSJ shape) — no media element, no lucky class.
+    return paintedGeometry(node);
   }
 
   var FREEZE_PROPS = ('display,position,left,right,top,bottom,width,height,min-width,max-width,min-height,max-height,' +
@@ -856,14 +895,10 @@
         if (cs) {
           for (var p = 0; p < FREEZE_PROPS.length; p++) {
             var v = cs.getPropertyValue(FREEZE_PROPS[p]);
-            // A graphic caught mid-entrance-animation would
-            // freeze half-faded; HTML elements snap to their
-            // finished opacity (SVG internals keep theirs —
-            // chart data legitimately uses faint opacities).
-            if (v && FREEZE_PROPS[p] === 'opacity' && !(oe.namespaceURI && oe.namespaceURI.indexOf('svg') >= 0)) {
-              var ov = parseFloat(v);
-              if (!isNaN(ov) && ov <= 0.5) v = '1';
-            }
+            // Opacity is copied FAITHFULLY (v1.18.2): the
+            // v1.18.1 snap-to-1 backfired — charts keep
+            // hover-reveal labels at opacity 0 by design, and
+            // snapping made them all visible at once.
             if (v) { try { ce.style.setProperty(FREEZE_PROPS[p], FREEZE_PROPS[p] === 'background-image' ? absolutizeBg(v, baseUrl) : v); } catch (e) {} }
           }
         }
@@ -878,6 +913,10 @@
       }
       if (clone.style) {
         if (clone.style.position === 'absolute' || clone.style.position === 'fixed') clone.style.position = 'relative';
+        // The reader's scaler owns sizing now; a transform
+        // the page put on the chart root (its own fit-to-
+        // screen scaling) must not apply a second time.
+        clone.style.transform = 'none';
         clone.style.maxWidth = '100%';
         clone.style.marginLeft = 'auto';
         clone.style.marginRight = 'auto';
@@ -901,8 +940,13 @@
     var key = 'gfx:' + graphicHash(html);
     if (seen[key]) return true;
     seen[key] = 1;
-    var rect = child.getBoundingClientRect();
-    blocks.push({ type: 'graphic', html: html, w: Math.round(rect.width), h: Math.round(rect.height) });
+    // Natural size = layout size. The visual rect would bake
+    // in any scaling the page itself applied, and the scaler
+    // would then shrink (or fail to shrink) by that factor a
+    // second time.
+    var w = child.offsetWidth || 0, h = child.offsetHeight || 0;
+    if (!w || !h) { var rect = child.getBoundingClientRect(); w = Math.round(rect.width); h = Math.round(rect.height); }
+    blocks.push({ type: 'graphic', html: html, w: w, h: h });
     return true;
   }
 

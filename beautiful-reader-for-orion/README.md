@@ -1,4 +1,32 @@
-# Beautiful Reader for Orion — v1.18.1
+# Beautiful Reader for Orion — v1.18.2
+
+## What's new in v1.18.2
+
+**The chart was never freezing whole — now it can.** A
+live inspection of the WSJ "Supply Chain Strain" chart
+settled what it actually is: plain styled `<div>`s — no
+SVG, no canvas, no image. The v1.18 detector required a
+media element or a lucky class name, so the walk took the
+chart apart instead: its title became a reader heading,
+its legend became stray text lines, and only a fragment
+froze. Three fixes:
+
+- **Painted-geometry detection.** A container now also
+  qualifies as a chart when it holds several solid-colour
+  boxes of real size (bar segments, chips) while staying
+  label-short on text — the signature of a div-built
+  chart. The prose and link guards still keep sections
+  and related-story modules out.
+- **Sizes are layout sizes.** The stored natural size is
+  the element's offset size, not its on-screen rect — a
+  page that scales its own chart wrapper no longer makes
+  the reader's scaler shrink by the same factor twice,
+  and the frozen root's own transform is stripped (the
+  scaler replaces it).
+- **Opacity is copied faithfully.** The v1.18.1
+  snap-to-full-opacity is gone: WSJ keeps its small-segment
+  labels (1.5%, 3.5%, 2%) invisible until hover BY DESIGN,
+  and the snap was painting them all at once.
 
 ## What's new in v1.18.1
 

@@ -1,3 +1,19 @@
+# HeckYeah for Orion — v0.12.1
+
+Popup hang fix. On-device the toolbar popup sat on "Loading…"
+forever (a clean reinstall did not help — the shipped popup code
+was verified clean). Root cause class: the shared storage read
+(extGet in common.js) called .then() directly on whatever
+browser.storage.local.get() returned and had no timeout, so in
+any context where that call returns undefined or a promise that
+never settles, loadStore() never resolved and the popup boot
+(which had no rejection handler) silently died. extGet now
+settles in every case — promise style, callback style, or a 3 s
+self-timeout that falls back to the localStorage mirror — and
+the popup boot is instrumented: a stall or throw renders a boot
+log in the popup instead of hanging. Verified in simulation
+against all three broken-storage shapes.
+
 # HeckYeah for Orion — v0.12.0
 
 Cleaner tiles, drag-to-reorder, streaming-only popup, no AirPlay:

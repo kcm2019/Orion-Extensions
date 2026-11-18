@@ -437,9 +437,18 @@ function test(name, fn) {
     assert.ok(fs.existsSync(__dirname + '/../update-check.js'), 'update-check.js exists');
   });
 
-  await test('manifest parses, version 0.12.0, files exist', () => {
+  await test('extGet can never hang a boot: promise/callback/timeout all settle', () => {
+    const common = fs.readFileSync(__dirname + '/../common.js', 'utf8');
+    assert.ok(common.includes("typeof r.then === 'function'"), 'promise return checked before use');
+    assert.ok(common.includes('fin(null); }, 3000'), 'storage read self-resolves after 3 s');
+    const pop = fs.readFileSync(__dirname + '/../popup.js', 'utf8');
+    assert.ok(pop.includes('bootSteps'), 'popup boot is instrumented');
+    assert.ok(pop.includes('bootFail'), 'popup renders boot failures instead of hanging');
+  });
+
+  await test('manifest parses, version 0.12.1, files exist', () => {
     const m = JSON.parse(fs.readFileSync(__dirname + '/../manifest.json', 'utf8'));
-    assert.strictEqual(m.version, '0.12.0');
+    assert.strictEqual(m.version, '0.12.1');
     assert.strictEqual(m.manifest_version, 2);
     m.content_scripts.forEach((cs) => {
       (cs.js || []).forEach((f) => assert.ok(fs.existsSync(__dirname + '/../' + f), f));

@@ -309,8 +309,32 @@ document.getElementById('updx').addEventListener('click', function () {
 });
 document.getElementById('updcheck').addEventListener('click', function () { runUpdCheck(true); });
 
+/* Boot — instrumented: if anything stalls or throws, the popup
+ * shows where it stopped instead of hanging on "Loading…". */
+var bootSteps = ['popup script loaded'];
+var bootDone = false;
+setTimeout(function () {
+  if (bootDone) return;
+  viewEl.innerHTML = '';
+  viewEl.appendChild(el('div', 'empty', 'Still loading — boot log:'));
+  bootSteps.forEach(function (s) { viewEl.appendChild(el('div', 'empty', '· ' + s)); });
+}, 2500);
+function bootFail(msg) {
+  bootDone = true;
+  viewEl.innerHTML = '';
+  viewEl.appendChild(el('div', 'empty', msg));
+  bootSteps.forEach(function (s) { viewEl.appendChild(el('div', 'empty', '· ' + s)); });
+}
 H.loadStore().then(function (s) {
+  bootSteps.push('store loaded (' + (s && s.storageMode) + ')');
   store = s;
-  renderHome();
+  try {
+    renderHome();
+    bootDone = true;
+  } catch (e) {
+    bootFail('Render error: ' + ((e && e.message) || e));
+  }
   if (U) { refreshUpdFromStore(); runUpdCheck(false); }
+}, function (err) {
+  bootFail('Store failed to load: ' + ((err && err.message) || err));
 });

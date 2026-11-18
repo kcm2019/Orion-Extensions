@@ -18,23 +18,42 @@
    * streaming host back to fmhy.net. ---------- */
   function extGet() {
     return new Promise(function (resolve) {
+      var done = false;
+      function fin(v) { if (!done) { done = true; resolve(v); } }
+      function wrap(s) { return s && s[KEY] ? { data: s[KEY], mode: 'ext' } : null; }
+      /* Never hang: whichever style the host implements (promise,
+       * callback, both, or neither), settle within 3 s — a null
+       * result just falls back to the localStorage mirror. The
+       * original code called .then on the return value directly;
+       * a host whose get() returns undefined (or a promise that
+       * never settles in some contexts, e.g. Orion's popup) killed
+       * or froze every boot that depended on loadStore(). */
       try {
         if (typeof browser !== 'undefined' && browser.storage && browser.storage.local) {
-          browser.storage.local.get(KEY).then(function (s) {
-            resolve(s && s[KEY] ? { data: s[KEY], mode: 'ext' } : null);
-          }, function () { resolve(null); });
-          return;
+          var r = null, threw = false;
+          try { r = browser.storage.local.get(KEY); } catch (e) { threw = true; }
+          if (r && typeof r.then === 'function') {
+            r.then(function (s) { fin(wrap(s)); }, function () { fin(null); });
+            setTimeout(function () { fin(null); }, 3000);
+            return;
+          }
+          if (threw) { fin(null); return; }
+          // no promise returned — try the callback style
+          try {
+            browser.storage.local.get(KEY, function (s) { fin(wrap(s)); });
+            setTimeout(function () { fin(null); }, 3000);
+            return;
+          } catch (e) { fin(null); return; }
         }
-      } catch (e) {}
+      } catch (e) { fin(null); return; }
       try {
         if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-          chrome.storage.local.get(KEY, function (s) {
-            resolve(s && s[KEY] ? { data: s[KEY], mode: 'ext' } : null);
-          });
+          chrome.storage.local.get(KEY, function (s) { fin(wrap(s)); });
+          setTimeout(function () { fin(null); }, 3000);
           return;
         }
-      } catch (e) {}
-      resolve(null);
+      } catch (e) { fin(null); return; }
+      fin(null);
     });
   }
   function localGet() {

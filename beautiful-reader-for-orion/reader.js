@@ -117,8 +117,10 @@
     '.br-hero video{width:100%;height:auto;border-radius:14px;display:block;background:#000;box-shadow:0 14px 38px rgba(0,0,0,.22),0 3px 10px rgba(0,0,0,.14)}',
     '.br-body video{width:100%;height:auto;border-radius:12px;display:block;background:#000;box-shadow:0 12px 32px rgba(0,0,0,.20),0 2px 8px rgba(0,0,0,.12)}',
     '.br-embed{position:relative;width:100%;padding-top:56.25%;border-radius:12px;overflow:hidden;background:#000;box-shadow:0 12px 32px rgba(0,0,0,.20),0 2px 8px rgba(0,0,0,.12)}',
-    '.br-graphic{margin:1.6em 0;overflow:hidden;border-radius:10px}',
+    '.br-graphic{position:relative;margin:1.6em 0;overflow:hidden;border-radius:10px}',
     '.br-graphic img,.br-graphic svg,.br-graphic canvas{max-width:100%}',
+    '.br-graphic-scale{position:absolute;top:0;left:0;transform-origin:top left}',
+    '.br-embed-chart{background:#fff}',
     '.br-embed iframe{position:absolute;inset:0;width:100%;height:100%;border:0}',
     '#br-reader.br-bar-bottom .br-topbar{top:auto;bottom:0;border-bottom:0;border-top:1px solid var(--br-faint);padding-bottom:calc(10px + env(safe-area-inset-bottom,0px))}',
     '#br-reader.br-bar-bottom .br-sheet{top:auto;bottom:calc(env(safe-area-inset-bottom,0px) + 68px);transform-origin:bottom right;transform:scale(.9) translateY(10px)}',
@@ -770,6 +772,34 @@
     });
   }
 
+  // Decorative pseudo-elements (legend chips, rule lines,
+  // markers) carry a chart's meaning but exist only in the
+  // page's stylesheet — a clone loses them. When a ::before /
+  // ::after actually paints something, materialize it as a
+  // real span with the pseudo's computed style (v1.18.1).
+  function materializePseudo(oe, ce, which, baseUrl) {
+    try {
+      var pcs = window.getComputedStyle(oe, which);
+      if (!pcs) return;
+      var content = pcs.getPropertyValue('content');
+      if (!content || content === 'none' || content === 'normal') return;
+      var bg = pcs.getPropertyValue('background-color');
+      var bgi = pcs.getPropertyValue('background-image');
+      var txt = '';
+      if (/^["']/.test(content)) txt = content.replace(/^["']|["']$/g, '');
+      var hasFill = txt || (bg && bg !== 'transparent' && !/rgba\([^)]*,\s*0\)$/.test(bg)) || (bgi && bgi !== 'none');
+      if (!hasFill) return;
+      var sp = document.createElement('span');
+      if (txt) sp.textContent = txt;
+      for (var p = 0; p < FREEZE_PROPS.length; p++) {
+        var v = pcs.getPropertyValue(FREEZE_PROPS[p]);
+        if (v) { try { sp.style.setProperty(FREEZE_PROPS[p], FREEZE_PROPS[p] === 'background-image' ? absolutizeBg(v, baseUrl) : v); } catch (e) {} }
+      }
+      if (which === '::before') ce.insertBefore(sp, ce.firstChild);
+      else ce.appendChild(sp);
+    } catch (e) {}
+  }
+
   // Freeze a rendered graphic into self-contained HTML.
   // Returns null when anything about it is unsafe or huge.
   function freezeGraphic(node, baseUrl) {
@@ -779,6 +809,20 @@
       var orig = [node].concat(Array.prototype.slice.call(node.querySelectorAll('*')));
       var copy = [clone].concat(Array.prototype.slice.call(clone.querySelectorAll('*')));
       if (copy.length !== orig.length || copy.length > 601) return null;
+      // The background the graphic visually sits on: many
+      // charts are transparent and borrow the page's ground.
+      // In the reader that ground is the theme's, which can
+      // invert the design — carry the page's ground along
+      // when the graphic has none of its own (v1.18.1).
+      var groundBg = '';
+      try {
+        var bn = node;
+        while (bn && bn.nodeType === 1) {
+          var bc = window.getComputedStyle(bn).getPropertyValue('background-color');
+          if (bc && bc !== 'transparent' && !/rgba\([^)]*,\s*0\)$/.test(bc)) { groundBg = bc; break; }
+          bn = bn.parentElement;
+        }
+      } catch (e) {}
       var removals = [];
       for (var i = 0; i < orig.length; i++) {
         var oe = orig[i], ce = copy[i];
@@ -812,11 +856,26 @@
         if (cs) {
           for (var p = 0; p < FREEZE_PROPS.length; p++) {
             var v = cs.getPropertyValue(FREEZE_PROPS[p]);
+            // A graphic caught mid-entrance-animation would
+            // freeze half-faded; HTML elements snap to their
+            // finished opacity (SVG internals keep theirs —
+            // chart data legitimately uses faint opacities).
+            if (v && FREEZE_PROPS[p] === 'opacity' && !(oe.namespaceURI && oe.namespaceURI.indexOf('svg') >= 0)) {
+              var ov = parseFloat(v);
+              if (!isNaN(ov) && ov <= 0.5) v = '1';
+            }
             if (v) { try { ce.style.setProperty(FREEZE_PROPS[p], FREEZE_PROPS[p] === 'background-image' ? absolutizeBg(v, baseUrl) : v); } catch (e) {} }
           }
         }
+        materializePseudo(oe, ce, '::before', baseUrl);
+        materializePseudo(oe, ce, '::after', baseUrl);
       }
       for (var r = 0; r < removals.length; r++) { if (removals[r].parentNode) removals[r].parentNode.removeChild(removals[r]); }
+      if (groundBg && clone.style) {
+        var ownBg = '';
+        try { ownBg = window.getComputedStyle(node).getPropertyValue('background-color'); } catch (e) {}
+        if (!ownBg || ownBg === 'transparent' || /rgba\([^)]*,\s*0\)$/.test(ownBg)) clone.style.backgroundColor = groundBg;
+      }
       if (clone.style) {
         if (clone.style.position === 'absolute' || clone.style.position === 'fixed') clone.style.position = 'relative';
         clone.style.maxWidth = '100%';
@@ -1394,6 +1453,7 @@
           // Chart embeds keep their own aspect and run
           // sandboxed (v1.18.0) — scripts yes, top navigation
           // and downloads no.
+          ew.classList.add('br-embed-chart');
           ifr.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups');
           if (b.w > 0 && b.h > 0) ew.style.paddingTop = (b.h / b.w * 100).toFixed(2) + '%';
         }
@@ -1403,8 +1463,22 @@
       else if (b.type === 'graphic') {
         // Frozen snapshot of a graphic the page drew itself:
         // self-contained HTML with inlined styles (v1.18.0).
+        // When its natural size is known it renders inside a
+        // scaler (v1.18.1): the snapshot keeps its own pixel
+        // layout and is scaled down to the column, instead of
+        // being clipped by the wrapper's overflow.
         var gw = el('div', 'br-graphic');
-        gw.innerHTML = b.html;
+        if (b.w > 0 && b.h > 0) {
+          gw.classList.add('br-graphic-fit');
+          gw.setAttribute('data-w', b.w);
+          gw.setAttribute('data-h', b.h);
+          var gsc = el('div', 'br-graphic-scale');
+          gsc.style.width = b.w + 'px';
+          gsc.innerHTML = b.html;
+          gw.appendChild(gsc);
+        } else {
+          gw.innerHTML = b.html;
+        }
         n = gw;
       }
       else if (b.type === 'quote') {
@@ -1460,7 +1534,40 @@
       } else if (b.type === 'hr') { n = el('hr'); }
       if (n) container.appendChild(n);
     });
+    scheduleFitGraphics();
   }
+
+  // Scale-to-fit for frozen graphics (v1.18.1): a snapshot is
+  // frozen at the width the page gave it (often a ~700px
+  // desktop card) while the reading column may be ~360px.
+  // The scaler holds the natural layout; this pass measures
+  // the real column and shrinks the whole coordinate system
+  // with a transform, centering the result and giving the
+  // wrapper the scaled height so the article flows around
+  // the size the reader actually sees.
+  function fitGraphics() {
+    if (!S.articleBody) return;
+    var list = S.articleBody.querySelectorAll('.br-graphic-fit');
+    for (var i = 0; i < list.length; i++) {
+      var gw = list[i];
+      var w = parseFloat(gw.getAttribute('data-w')) || 0;
+      var h = parseFloat(gw.getAttribute('data-h')) || 0;
+      var avail = gw.clientWidth;
+      if (!w || !h || !avail) continue;
+      var s = Math.min(1, avail / w);
+      var inner = gw.firstElementChild;
+      if (!inner) continue;
+      inner.style.transform = s < 1 ? 'scale(' + s + ')' : '';
+      inner.style.left = Math.max(0, (avail - w * s) / 2) + 'px';
+      gw.style.height = Math.round(h * s) + 'px';
+    }
+  }
+  function scheduleFitGraphics() {
+    if (S._fitRaf) return;
+    var raf = window.requestAnimationFrame || function (fn) { return setTimeout(fn, 30); };
+    S._fitRaf = raf(function () { S._fitRaf = null; fitGraphics(); });
+  }
+  try { window.addEventListener('resize', function () { if (S.open) scheduleFitGraphics(); }); } catch (e) {}
 
   // Re-render after a view-mode change (text-only) without
   // losing the reader's place.

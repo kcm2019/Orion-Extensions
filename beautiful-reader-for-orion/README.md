@@ -1,4 +1,34 @@
-# Beautiful Reader for Orion — v1.18.0
+# Beautiful Reader for Orion — v1.18.1
+
+## What's new in v1.18.1
+
+**Graphics fit the column, and freeze more faithfully.**
+Field reports from the CNN election card and the WSJ
+"Supply Chain Strain" chart:
+
+- **Scale-to-fit.** A frozen snapshot keeps the pixel
+  layout the page gave it (often a ~700px desktop card) —
+  in a ~360px reading column that simply clipped. The
+  snapshot now renders inside a scaler: natural layout
+  preserved, the whole coordinate system shrunk to the
+  column with a transform, centred, wrapper height set to
+  the scaled height. Re-fits on rotation/resize.
+- **Pseudo-elements materialize.** Legend chips and other
+  ::before / ::after paint existed only in the page's
+  stylesheet and vanished in the clone; when a pseudo
+  actually paints, it becomes a real span with its computed
+  style.
+- **The page's ground comes along.** A transparent chart
+  borrowed the page's background; in a dark reader theme
+  that inverted the design (dark text on the theme's black,
+  or white text with nothing behind it). The snapshot now
+  carries the effective background it sat on.
+- **No more half-faded freezes.** A graphic caught
+  mid-entrance-animation froze at partial opacity; HTML
+  elements now snap to their finished opacity (SVG
+  internals keep theirs).
+- Chart embeds sit on white instead of the video embed's
+  black.
 
 ## What's new in v1.18.0
 

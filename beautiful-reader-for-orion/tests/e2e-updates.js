@@ -45,7 +45,7 @@ const wait = (ms) => new Promise(r => setTimeout(r, ms));
   const doc = w.document;
   await wait(900);
   chk('updates section present', !!doc.getElementById('sec-updates'));
-  chk('version label shows v1.18.0', doc.getElementById('upd-version').textContent === 'v1.18.0');
+  chk('version label shows v1.18.1', doc.getElementById('upd-version').textContent === 'v1.18.1');
   chk('auto check found the update', !!(store.upd_available && store.upd_available.version === '1.19.0'));
   chk('notice visible', doc.getElementById('upd-notice').hidden === false);
   chk('notice names the version', doc.getElementById('upd-notice-text').textContent.includes('1.19.0'));
@@ -68,7 +68,7 @@ const wait = (ms) => new Promise(r => setTimeout(r, ms));
   feedImpl = () => Promise.resolve({ status: 200, json: () => Promise.resolve(FEED_CURRENT) });
   doc.getElementById('upd-check').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
   await wait(300);
-  chk('manual check reports latest honestly', doc.getElementById('upd-status').textContent.includes("You're on the latest version (v1.18.0)"));
+  chk('manual check reports latest honestly', doc.getElementById('upd-status').textContent.includes("You're on the latest version (v1.18.1)"));
   chk('available cleared when current', store.upd_available === null);
 
   feedImpl = () => Promise.reject(new Error('offline'));

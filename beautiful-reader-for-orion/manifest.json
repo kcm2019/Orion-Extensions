@@ -42,7 +42,7 @@
     "webRequest",
     "webRequestBlocking"
   ],
-  "version": "1.18.0",
+  "version": "1.18.1",
   "browser_action": {
     "default_title": "Beautiful Reader",
     "default_popup": "popup.html",

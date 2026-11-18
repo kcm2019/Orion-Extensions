@@ -23,11 +23,13 @@ async function waitFor(fn, ms) {
 const P = (n) => 'Paragraph ' + n + ' of the defence analysis explains in considerable detail how the supplier base for missile components consolidated over two decades, leaving primes exposed when production had to surge quickly.';
 const html = `<!DOCTYPE html><html><head><title>Missile Supply</title>
 <meta property="og:title" content="The Missile Supply Problem">
-</head><body><main><article>
+<style>.brk-chip::before{content:'';background-color:#b58900;width:10px;height:10px;display:inline-block;margin-right:6px}</style>
+</head><body style="background-color:#ffffff"><main><article>
 <h1>The Missile Supply Problem</h1>
 <p>${P(1)}</p><p>${P(2)}</p>
 <div class="chart" id="supply-chart">
-  <div style="font-weight:700;font-size:18px">Supply Chain Strain</div>
+  <div style="font-weight:700;font-size:18px;opacity:.2">Supply Chain Strain</div>
+  <div class="brk-chip">1 missile</div>
   <svg width="300" height="60" viewBox="0 0 300 60"><rect x="0" y="10" width="120" height="30" fill="#1f6f7a"></rect><rect x="120" y="10" width="180" height="30" fill="#7fb3bd"></rect></svg>
   <div><span style="background:#1f6f7a;color:#fff;padding:2px 8px">19%</span> <span style="background:#7fb3bd;padding:2px 8px">69%</span></div>
   <script>window.__evil = 1;</script>
@@ -82,9 +84,20 @@ const html = `<!DOCTYPE html><html><head><title>Missile Supply</title>
   chk('ad iframe produced no block', !blocks.some((b) => b.src && b.src.indexOf('doubleclick') >= 0));
   chk('prose section paragraphs still extracted', blocks.filter((b) => b.type === 'paragraph').length >= 8);
 
+  chk('frozen root carries the page ground colour', gfx.length && gfx[0].html.indexOf('background-color: rgb(255, 255, 255)') >= 0);
+  chk('mid-animation opacity snaps to finished', gfx.length && gfx[0].html.indexOf('opacity: 1') >= 0);
+  chk('pseudo-element legend chip materialized', gfx.length && gfx[0].html.indexOf('rgb(181, 137, 0)') >= 0);
+
   // rendering
   const gEl = w.document.querySelector('#br-reader .br-graphic');
   chk('graphic renders in the reader', !!gEl && gEl.querySelector('svg') !== null);
+  chk('graphic renders inside the scaler', !!gEl && gEl.classList.contains('br-graphic-fit') && !!gEl.querySelector('.br-graphic-scale'));
+  const scaler = gEl && gEl.querySelector('.br-graphic-scale');
+  chk('scaler holds the natural width', !!scaler && scaler.style.width === '640px');
+  Object.defineProperty(gEl, 'clientWidth', { value: 320, configurable: true });
+  w.dispatchEvent(new w.Event('resize'));
+  chk('fit pass runs on resize', await waitFor(() => scaler && scaler.style.transform === 'scale(0.5)', 1500));
+  chk('wrapper takes the scaled height', gEl.style.height === '150px');
   const eEls = w.document.querySelectorAll('#br-reader .br-embed iframe');
   chk('both embeds render iframes', eEls.length === 2);
   const genFrame = Array.from(eEls).find((f) => (f.getAttribute('src') || '').indexOf('graphics.example') >= 0);

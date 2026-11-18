@@ -20,7 +20,7 @@
   var root = (typeof window !== 'undefined') ? window
     : (typeof globalThis !== 'undefined') ? globalThis : this;
 
-  var VERSION = '1.18.0';
+  var VERSION = '1.18.1';
   var ADDON_ID = 'orion-beautiful-reader@local';
   var FEED_URL = 'https://raw.githubusercontent.com/kcm2019/Orion-Extensions/main/updates.json';
   var THROTTLE_MS = 12 * 3600 * 1000;

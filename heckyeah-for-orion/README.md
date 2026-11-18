@@ -1,3 +1,17 @@
+# HeckYeah for Orion — v0.12.3
+
+Back to v0.12.0 (Kurt's call): the popup is the streaming-only
+home again (renderPopShelves + star toggles + drag reorder,
+restored verbatim from the v0.12.0 package), undoing the
+v0.12.2 revert. Postscript on the v0.12.0 popup hang: it WAS
+the stale-cache mix from the first diagnosis — quitting Orion
+cleared the cached old popup script and the menu loaded.
+Kept from v0.12.1: the extGet storage hardening in common.js
+(invisible; a storage read can never stall a boot). The
+instrumented popup boot from v0.12.1 is NOT kept — popup.js is
+exactly v0.12.0's. Version is 0.12.3 (not 0.12.0) so installs
+and the update feed stay monotonic.
+
 # HeckYeah for Orion — v0.12.2
 
 Popup reverted (Kurt's request): the extension menu is back to

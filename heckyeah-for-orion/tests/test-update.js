@@ -55,7 +55,7 @@ function test(name, fn) {
 
 (async () => {
   await test('constants: version, id, feed', () => {
-    assert.strictEqual(U.VERSION, '0.12.2');
+    assert.strictEqual(U.VERSION, '0.12.3');
     assert.strictEqual(U.ADDON_ID, 'heckyeah-orion@local');
     assert.ok(U.FEED_URL.includes('Orion-Extensions'));
   });
@@ -171,7 +171,7 @@ function test(name, fn) {
     await env.U.dismiss('0.12.0');
     const st = await env.U.getState();
     assert.strictEqual(st.dismissed, '0.12.0');
-    assert.strictEqual(st.version, '0.12.2');
+    assert.strictEqual(st.version, '0.12.3');
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);

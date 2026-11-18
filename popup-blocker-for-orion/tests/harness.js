@@ -6,6 +6,7 @@ const assert = require('assert');
 
 const hookSrc = fs.readFileSync(__dirname + '/../page-hook.js', 'utf8');
 const bgSrc = fs.readFileSync(__dirname + '/../background.js', 'utf8');
+const updSrc = fs.readFileSync(__dirname + '/../update-check.js', 'utf8');
 
 function makeHookEnv() {
   const posted = [];
@@ -378,5 +379,160 @@ const blankAnchor = {
     console.log('PASS 20 content script loads at document_start');
   }
 
-  console.log('ALL 20 TESTS PASS');
+  // 21. v1.2.0 update checker: compareVersions
+  {
+    const UC = require(__dirname + '/../update-check.js');
+    assert.strictEqual(UC.compareVersions('1.2.0', '1.2.0'), 0);
+    assert.strictEqual(UC.compareVersions('1.10.0', '1.9.9'), 1);
+    assert.strictEqual(UC.compareVersions('1.2', '1.2.1'), -1);
+    assert.strictEqual(UC.compareVersions('2.0.0', '1.99.99'), 1);
+    assert.strictEqual(UC.compareVersions('1.0.0', '1.0'), 0);
+    assert.strictEqual(UC.compareVersions('0.9.9', '1.0.0'), -1);
+    console.log('PASS 21 update compareVersions');
+  }
+
+  // 22. v1.2.0 update checker: pickUpdate (Firefox shape + simple shape)
+  {
+    const UC = require(__dirname + '/../update-check.js');
+    const feed = { addons: {
+      'orion-popup-blocker@local': { updates: [
+        { version: '1.1.5', update_link: 'https://x/115.xpi' },
+        { version: '1.3.0', update_link: 'https://x/130.xpi' },
+        { version: '1.2.5', update_link: 'https://x/125.xpi' },
+      ] },
+      'other@local': { updates: [{ version: '9.9.9', update_link: 'https://x/999.xpi' }] },
+    } };
+    const picked = UC.pickUpdate(feed, 'orion-popup-blocker@local', '1.2.0');
+    assert.strictEqual(picked.version, '1.3.0');
+    assert.strictEqual(picked.update_link, 'https://x/130.xpi');
+    assert.strictEqual(UC.pickUpdate(feed, 'orion-popup-blocker@local', '1.3.0'), null);
+    assert.strictEqual(UC.pickUpdate(feed, 'missing@local', '1.0.0'), null);
+    const simple = UC.pickUpdate({ version: '1.4.0', update_link: 'https://x/140.xpi' }, 'orion-popup-blocker@local', '1.2.0');
+    assert.strictEqual(simple.version, '1.4.0');
+    assert.strictEqual(UC.pickUpdate({ version: '1.4.0' }, 'orion-popup-blocker@local', '1.4.0'), null);
+    assert.strictEqual(UC.pickUpdate(null, 'orion-popup-blocker@local', '1.2.0'), null);
+    assert.strictEqual(UC.pickUpdate({}, 'orion-popup-blocker@local', '1.2.0'), null);
+    console.log('PASS 22 update pickUpdate picks highest newer only');
+  }
+
+  // 23. v1.2.0 update checker: checkNow flow — update, throttle, error preserves
+  {
+    const store = {};
+    let fetchCount = 0;
+    let failFetch = false;
+    const feedJson = { addons: { 'orion-popup-blocker@local': { updates: [
+      { version: '1.3.0', update_link: 'https://x/130.xpi' } ] } } };
+    const sandbox = {
+      console, Date, Promise, JSON,
+      browser: {
+        runtime: {},
+        storage: { local: {
+          get: (keys) => Promise.resolve(Object.fromEntries(keys.filter((k) => k in store).map((k) => [k, store[k]]))),
+          set: (obj) => { Object.assign(store, obj); return Promise.resolve(); },
+        } },
+      },
+      fetch: () => {
+        fetchCount++;
+        if (failFetch) return Promise.reject(new Error('network-down'));
+        return Promise.resolve({ status: 200, json: () => Promise.resolve(feedJson) });
+      },
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(updSrc, sandbox);
+    const UC = sandbox.OrionUpdateCheck;
+    assert.ok(UC && UC.checkNow, 'checker exposed in extension context');
+    const r1 = await UC.checkNow(false);
+    assert.strictEqual(r1.state, 'update');
+    assert.strictEqual(r1.version, '1.3.0');
+    assert.strictEqual(store.upd_available.version, '1.3.0');
+    assert.strictEqual(fetchCount, 1);
+    const r2 = await UC.checkNow(false);
+    assert.strictEqual(r2.throttled, true, 'auto check throttled within 12h');
+    assert.strictEqual(fetchCount, 1, 'throttled check does not refetch');
+    failFetch = true;
+    const r3 = await UC.checkNow(true);
+    assert.strictEqual(r3.state, 'error');
+    assert.strictEqual(store.upd_available.version, '1.3.0', 'error never clears a found update');
+
+    // Fresh env, dead feed: honest error, throttle stamped, no false "current"
+    const store2 = {};
+    const sandbox2 = {
+      console, Date, Promise, JSON,
+      browser: {
+        runtime: {},
+        storage: { local: {
+          get: (keys) => Promise.resolve(Object.fromEntries(keys.filter((k) => k in store2).map((k) => [k, store2[k]]))),
+          set: (obj) => { Object.assign(store2, obj); return Promise.resolve(); },
+        } },
+      },
+      fetch: () => Promise.resolve({ status: 404, json: () => Promise.resolve({}) }),
+    };
+    vm.createContext(sandbox2);
+    vm.runInContext(updSrc, sandbox2);
+    const r4 = await sandbox2.OrionUpdateCheck.checkNow(false);
+    assert.strictEqual(r4.state, 'error', '404 feed is an error, not "up to date"');
+    assert.ok(typeof store2.upd_last_check === 'number' && store2.upd_last_check > 0, 'auto error stamps throttle');
+    assert.ok(!store2.upd_available, 'no phantom update stored');
+    console.log('PASS 23 update checkNow update/throttle/error flow');
+  }
+
+  // 24. v1.2.0: background startup runs the throttled check when the
+  // checker is loaded before it; content script still loads clean
+  // with the checker loaded first and no fetch available.
+  {
+    const store = {};
+    let listener = null;
+    const feedJson = { addons: { 'orion-popup-blocker@local': { updates: [
+      { version: '1.3.0', update_link: 'https://x/130.xpi' } ] } } };
+    const sandbox = {
+      console, URL, Date, Promise, JSON,
+      browser: {
+        runtime: { onMessage: { addListener(fn) { listener = fn; } } },
+        tabs: { create: () => Promise.resolve({ id: 1 }) },
+        storage: { local: {
+          get: (keys) => Promise.resolve(Object.fromEntries(keys.filter((k) => k in store).map((k) => [k, store[k]]))),
+          set: (obj) => { Object.assign(store, obj); return Promise.resolve(); },
+        } },
+      },
+      fetch: () => Promise.resolve({ status: 200, json: () => Promise.resolve(feedJson) }),
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(updSrc, sandbox);
+    vm.runInContext(bgSrc, sandbox);
+    assert.ok(listener, 'bg listener still registered with checker loaded');
+    await new Promise((r) => setTimeout(r, 20));
+    assert.ok(store.upd_available && store.upd_available.version === '1.3.0',
+      'background startup auto-check stored the update');
+
+    const contentSrc = fs.readFileSync(__dirname + '/../content.js', 'utf8');
+    const el = () => ({
+      style: {}, classList: { toggle() {}, add() {}, remove() {} },
+      addEventListener() {}, appendChild(c) { return c; }, remove() {},
+      set textContent(v) {}, get textContent() { return ''; },
+    });
+    const winStub = {
+      location: { hostname: 'example.com', href: 'https://example.com/' },
+      addEventListener() {},
+      postMessage() {},
+    };
+    winStub.top = winStub;
+    const csandbox = {
+      console, URL, Promise,
+      window: winStub,
+      document: {
+        head: el(), documentElement: el(), body: null,
+        createElement: () => el(),
+        addEventListener() {},
+      },
+      localStorage: { getItem: () => null, setItem() {} },
+      setTimeout: () => 0, clearTimeout: () => {},
+    };
+    vm.createContext(csandbox);
+    vm.runInContext(updSrc, csandbox);
+    vm.runInContext(contentSrc, csandbox);
+    await new Promise((r) => setTimeout(r, 20));
+    console.log('PASS 24 background startup check + content loads with checker');
+  }
+
+  console.log('ALL 24 TESTS PASS');
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });

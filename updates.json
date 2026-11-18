@@ -19,6 +19,14 @@
           "update_link": "https://muse.ai/files/665768643292256/1760069921752281/b616wxsljsld0x85l9pkc2qh/beautiful-reader-orion-1.18.3.xpi"
         }
       ]
+    },
+    "orion-popup-blocker@local": {
+      "updates": [
+        {
+          "version": "1.2.0",
+          "update_link": "https://muse.ai/files/665768643292256/1666837661772456/o3752r92g610mupgmovpvjw7/orion-popup-blocker-1.2.0.xpi"
+        }
+      ]
     }
   }
 }

@@ -1,10 +1,17 @@
 'use strict';
-/* Popup Blocker for Orion — background (v1.0.0)
+/* Popup Blocker for Orion — background (v1.2.0)
  * One job: open a blocked popup's URL in a real tab when the user
  * taps Open in the panel. tabs.create is extension-privileged, so
  * no popup blocker (including this one) can stop it. If Orion's
  * tabs API is unavailable, reply {ok:false} and content.js falls
  * back to the page hook's one-time native open.
+ *
+ * v1.2.0: update-check.js is loaded before this script; on
+ * startup it runs one throttled update check (12 h, silent on
+ * failure). The panel's Download button reuses the same
+ * 'opb-open-tab' message with the update's .xpi link, so the
+ * download goes through this privileged path and the blocker
+ * never blocks its own update.
  */
 (function () {
   var api = null;
@@ -38,4 +45,13 @@
     }
     return undefined;
   });
+
+  // Throttled auto update check on startup (non-persistent page:
+  // this runs whenever the background wakes). Silent on failure.
+  try {
+    if (typeof OrionUpdateCheck !== 'undefined' && OrionUpdateCheck && OrionUpdateCheck.checkNow) {
+      var chk = OrionUpdateCheck.checkNow(false);
+      if (chk && typeof chk.catch === 'function') chk.catch(function () {});
+    }
+  } catch (e) {}
 })();

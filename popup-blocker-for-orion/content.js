@@ -1,5 +1,5 @@
 'use strict';
-/* Popup Blocker for Orion v1.1.0 (Firefox MV2) — content script.
+/* Popup Blocker for Orion v1.2.0 (Firefox MV2) — content script.
  *
  * Jobs:
  *  1. Inject page-hook.js into the page world at document_start
@@ -20,6 +20,14 @@
  * can stop it). If Orion doesn't answer there, fall back to asking
  * the page hook to use its one-time allowance with the native
  * opener.
+ *
+ *  4. v1.2.0 update checker (update-check.js, loaded before this
+ *     script): top frame only, throttled auto check on load. If a
+ *     newer version is known, the expanded panel's footer shows
+ *     "Update available: vX.Y.Z — Download" (✕ dismisses it) plus
+ *     a manual "Check for updates" button. Download reuses the
+ *     background 'opb-open-tab' path, so the blocker never blocks
+ *     its own update. Blocking behaviour is unchanged from v1.1.
  */
 (function () {
   var api = null;
@@ -291,6 +299,65 @@
     }
   }
 
+  /* ---------------- update checker (v1.2.0, top frame) ---------------- */
+  var updInfo = { available: null, dismissed: null };
+  function updateChecker() {
+    try { if (typeof OrionUpdateCheck !== 'undefined' && OrionUpdateCheck) return OrionUpdateCheck; }
+    catch (e) {}
+    return null;
+  }
+  function refreshUpdateState() {
+    var uc = updateChecker();
+    if (!uc || !uc.getState) return Promise.resolve();
+    return uc.getState().then(function (s) {
+      updInfo.available = s.available || null;
+      updInfo.dismissed = s.dismissed || null;
+      renderUpdateArea();
+    }).catch(function () {});
+  }
+  function renderUpdateArea() {
+    if (!ui || !ui.upd) return;
+    if (!updateChecker()) { ui.upd.classList.add('hidden'); return; }
+    ui.upd.classList.remove('hidden');
+    var a = updInfo.available;
+    var show = !!(a && a.version && a.version !== updInfo.dismissed);
+    ui.updRow.classList.toggle('hidden', !show);
+    if (show) ui.updText.textContent = 'Update available: v' + a.version;
+  }
+  function setUpdStatus(msg) {
+    if (ui && ui.updStatus) ui.updStatus.textContent = msg || '';
+  }
+  function downloadUpdate() {
+    var a = updInfo.available;
+    if (!a || !a.update_link) { setUpdStatus('No download link in the update feed'); return; }
+    // Reuses the privileged background 'opb-open-tab' path (with
+    // the page-hook fallback inside openInNewTab), so this
+    // extension never blocks its own update download.
+    openInNewTab({ url: a.update_link });
+  }
+  function dismissUpdate() {
+    var uc = updateChecker();
+    var a = updInfo.available;
+    if (uc && uc.dismiss && a && a.version) {
+      try { uc.dismiss(a.version); } catch (e) {}
+      updInfo.dismissed = a.version;
+    }
+    renderUpdateArea();
+  }
+  function manualUpdateCheck() {
+    var uc = updateChecker();
+    if (!uc || !uc.checkNow) { setUpdStatus('Update checker unavailable'); return; }
+    setUpdStatus('Checking…');
+    uc.checkNow(true).then(function (r) {
+      if (r && r.state === 'update') setUpdStatus('Update available: v' + r.version);
+      else if (r && r.state === 'current') setUpdStatus("You're on the latest version (v" + uc.currentVersion() + ')');
+      else setUpdStatus("Couldn't check for updates (feed unreachable)");
+      return refreshUpdateState();
+    }).catch(function () {
+      setUpdStatus("Couldn't check for updates (feed unreachable)");
+    });
+  }
+
   /* ---------------- UI (top frame only) ---------------- */
   var ui = null; // { host, shadow, pill, badge, panel, list, status, modeBtn, allowBtn, title }
   var uiState = 'hidden'; // hidden | pill | badge | panel
@@ -330,6 +397,13 @@
     '.status { font-size: 11px; color: #ffd60a; padding: 0 12px 8px; min-height: 0; }',
     '.foot { padding: 0 12px 10px; }',
     '.clear { background: transparent; border: 0; color: #ff453a; font-size: 12px; padding: 4px 0; }',
+    '.upd { border-top: 1px solid #333336; margin-top: 6px; padding-top: 8px; }',
+    '.updRow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }',
+    '.updText { font-size: 12px; font-weight: 600; color: #ffd60a; }',
+    '.updDl { background: #0a84ff; color: #fff; border: 0; border-radius: 7px; padding: 6px 9px; font-size: 11.5px; font-weight: 600; }',
+    '.updX { background: transparent; border: 0; color: #aeaeb2; font-size: 14px; padding: 2px 4px; }',
+    '.updCheck { background: #2c2c2e; color: #f2f2f7; border: 0; border-radius: 8px; padding: 6px 9px; font-size: 11.5px; }',
+    '.updStatus { font-size: 11px; color: #aeaeb2; }',
     '.hidden { display: none !important; }',
   ].join('\n');
 
@@ -411,6 +485,38 @@
     });
     foot.appendChild(clearBtn);
 
+    // v1.2.0 update checker area (footer, below Clear all)
+    var upd = document.createElement('div');
+    upd.className = 'upd';
+    var updRow = document.createElement('div');
+    updRow.className = 'updRow hidden';
+    var updText = document.createElement('span');
+    updText.className = 'updText';
+    var updDl = document.createElement('button');
+    updDl.className = 'updDl';
+    updDl.textContent = 'Download';
+    updDl.addEventListener('click', function () { downloadUpdate(); });
+    var updX = document.createElement('button');
+    updX.className = 'updX';
+    updX.textContent = '✕';
+    updX.addEventListener('click', function () { dismissUpdate(); });
+    updRow.appendChild(updText);
+    updRow.appendChild(updDl);
+    updRow.appendChild(updX);
+    var updCtrl = document.createElement('div');
+    updCtrl.className = 'updRow';
+    var updCheckBtn = document.createElement('button');
+    updCheckBtn.className = 'updCheck';
+    updCheckBtn.textContent = 'Check for updates';
+    updCheckBtn.addEventListener('click', function () { manualUpdateCheck(); });
+    var updStatus = document.createElement('span');
+    updStatus.className = 'updStatus';
+    updCtrl.appendChild(updCheckBtn);
+    updCtrl.appendChild(updStatus);
+    upd.appendChild(updRow);
+    upd.appendChild(updCtrl);
+    foot.appendChild(upd);
+
     panel.appendChild(head);
     panel.appendChild(controls);
     panel.appendChild(status);
@@ -424,8 +530,10 @@
     document.documentElement.appendChild(host);
 
     ui = { host: host, shadow: shadow, pill: pill, badge: badge, panel: panel,
-           list: list, status: status, modeBtn: modeBtn, allowBtn: allowBtn, title: title };
+           list: list, status: status, modeBtn: modeBtn, allowBtn: allowBtn, title: title,
+           upd: upd, updRow: updRow, updText: updText, updStatus: updStatus };
     renderControls();
+    renderUpdateArea();
   }
 
   function setStatus(msg) {
@@ -457,7 +565,7 @@
       }, 4000);
     }
     if (state === 'badge') ui.badge.textContent = String(entries.length);
-    if (state === 'panel') renderList();
+    if (state === 'panel') { renderList(); refreshUpdateState(); }
     renderControls();
   }
 
@@ -543,6 +651,21 @@
       box.appendChild(row);
       ui.list.appendChild(box);
     });
+  }
+
+  // v1.2.0: throttled auto update check, top frame only (the
+  // storage throttle in update-check.js makes the background
+  // script's duplicate trigger cheap). Silent on failure.
+  if (IS_TOP) {
+    var uc0 = updateChecker();
+    if (uc0 && uc0.checkNow) {
+      try {
+        var p0 = uc0.checkNow(false);
+        if (p0 && typeof p0.then === 'function') {
+          p0.then(function () { refreshUpdateState(); }, function () {});
+        }
+      } catch (e) {}
+    }
   }
 
   loadSettings();

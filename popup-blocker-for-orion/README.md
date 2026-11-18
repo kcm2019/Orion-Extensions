@@ -1,4 +1,47 @@
-# Popup Blocker for Orion — v1.1.0
+# Popup Blocker for Orion — v1.2.0
+
+## What's new in v1.2.0 — the update checker
+
+- **In-extension update checker** (`update-check.js`). The
+  extension now discovers newer versions by itself — see
+  **Updates** below. Blocking behaviour is exactly as in v1.1;
+  nothing about how popups are intercepted has changed.
+
+Remove the old version in Orion before installing v1.2.
+
+---
+
+## Updates
+
+- `update-check.js` polls a Firefox-style update manifest
+  (`updates.json`) — by default
+  `https://raw.githubusercontent.com/kcm2019/Orion-Extensions/main/updates.json`,
+  overridable via the `upd_feed_url` key in `storage.local` —
+  at most once every 12 hours (background startup + top-page
+  load, throttled in storage), plus on demand.
+- If a newer version is found, the expanded **Popup blocked**
+  panel shows a footer row: **Update available: vX.Y.Z** with a
+  **Download** button and a ✕ to dismiss that version. Download
+  goes through the background script's privileged `tabs.create`
+  path (the same one used for **Open** on a blocked popup), so
+  the blocker never blocks its own update.
+- A **Check for updates** button in the same panel footer runs a
+  check immediately and reports inline: *Update available: v…*,
+  *You're on the latest version (v…)*, or *Couldn't check for
+  updates (feed unreachable)*.
+- The checker can only *offer* an update — no WebExtension API
+  lets an extension install a new version of itself. Download
+  opens the new `.xpi` and you install it from file in Orion,
+  as before.
+- **Private-repo caveat:** the Orion-Extensions repo is private,
+  so the default feed may be unreachable (404) without a login.
+  Auto checks then fail silently; a manual check says so
+  honestly instead of claiming you're up to date.
+- Note: the panel only appears after a popup has been blocked
+  on the page — if nothing was blocked, there's no panel and
+  the update row / manual check aren't visible on that page.
+
+---
 
 ## What's new in v1.1 — the click-hijack shield
 

@@ -1,3 +1,21 @@
+# HeckYeah for Orion — v0.12.5
+
+Startup checks + the stale-update banner, fixed:
+- The extension now checks for updates when the browser
+  starts: a minimal non-persistent background page
+  (bg-update.js) listens for runtime.onStartup and runs a
+  FORCED check (throttle bypassed). The result lands in
+  storage, so the banner is already waiting when you open the
+  app view or the popup. If Orion never delivers onStartup,
+  the surfaces' throttled auto-check remains the backstop.
+- The "update available" banner no longer survives the update
+  itself: the stored entry was written before the install and
+  nothing cleared it, and the banner only compared against the
+  dismissed version. getState() now filters out any stored
+  entry at or below the running version (and clears it), so
+  after updating, the notice is gone in both the popup and the
+  app view.
+
 # HeckYeah for Orion — v0.12.4
 
 Update checker, fixed end to end + collapsible popup sections:

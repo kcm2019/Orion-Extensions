@@ -11,7 +11,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '0.12.4';
+  var VERSION = '0.12.5';
   var ADDON_ID = 'heckyeah-orion@local';
   var FEED_URL = 'https://raw.githubusercontent.com/kcm2019/Orion-Extensions/main/updates.json';
   var THROTTLE_MS = 12 * 60 * 60 * 1000; // 12 h between auto checks
@@ -195,8 +195,19 @@
 
   function getState() {
     return storageGet(['upd_available', 'upd_dismissed', 'upd_last_check']).then(function (st) {
+      var avail = st.upd_available || null;
+      /* An "available" entry at or below the RUNNING version is
+       * stale: it was stored before the user installed that very
+       * version, and nothing cleared it — so the banner kept
+       * offering an update that was already installed. Filter it
+       * here (both surfaces read state through this) and clear
+       * the stored entry so it stays gone. */
+      if (avail && compareVersions(avail.version, currentVersion()) <= 0) {
+        avail = null;
+        storageSet({ upd_available: null });
+      }
       return {
-        available: st.upd_available || null,
+        available: avail,
         dismissed: st.upd_dismissed || '',
         lastCheck: st.upd_last_check || 0,
         version: currentVersion()

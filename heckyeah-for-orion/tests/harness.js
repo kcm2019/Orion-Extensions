@@ -321,7 +321,8 @@ function test(name, fn) {
 
   await test('pairing roams: session in store, re-host + yield, no background page', () => {
     const m = JSON.parse(fs.readFileSync(__dirname + '/../manifest.json', 'utf8'));
-    assert.ok(!m.background, 'background host removed (never connected on Orion)');
+    assert.ok(!m.background || !m.background.scripts.some(function (s) { return s.includes('remote') || s.includes('peerjs'); }),
+      'pairing is never hosted in a background page (v0.6.0 lesson); background is update-check only');
     const rem = fs.readFileSync(__dirname + '/../remote.js', 'utf8');
     assert.ok(rem.includes('hyoSession'), 'session persisted in the store');
     assert.ok(rem.includes('roamTick'), 'takeover watch');
@@ -437,6 +438,13 @@ function test(name, fn) {
     assert.ok(pop.includes('HYOUpdate'), 'popup uses the checker');
     assert.ok(pop.includes('checkNow'), 'popup manual/auto check wired');
     assert.ok(fs.existsSync(__dirname + '/../update-check.js'), 'update-check.js exists');
+    assert.ok(m.background && m.background.scripts.includes('bg-update.js'), 'startup check page declared');
+    assert.ok(m.background.scripts.includes('update-check.js'), 'checker loads in the background page');
+    const bg = fs.readFileSync(__dirname + '/../bg-update.js', 'utf8');
+    assert.ok(bg.includes('onStartup'), 'forced check on browser startup');
+    assert.ok(bg.includes('checkNow(true)'), 'startup check bypasses the throttle');
+    const upd = fs.readFileSync(__dirname + '/../update-check.js', 'utf8');
+    assert.ok(upd.includes('stale'), 'stored update at/below running version is filtered');
   });
 
   await test('extGet can never hang a boot: promise/callback/timeout all settle', () => {
@@ -445,9 +453,9 @@ function test(name, fn) {
     assert.ok(common.includes('fin(null); }, 3000'), 'storage read self-resolves after 3 s');
   });
 
-  await test('manifest parses, version 0.12.4, files exist', () => {
+  await test('manifest parses, version 0.12.5, files exist', () => {
     const m = JSON.parse(fs.readFileSync(__dirname + '/../manifest.json', 'utf8'));
-    assert.strictEqual(m.version, '0.12.4');
+    assert.strictEqual(m.version, '0.12.5');
     assert.strictEqual(m.manifest_version, 2);
     m.content_scripts.forEach((cs) => {
       (cs.js || []).forEach((f) => assert.ok(fs.existsSync(__dirname + '/../' + f), f));

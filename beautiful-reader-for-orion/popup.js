@@ -6,12 +6,13 @@
 (function () {
   'use strict';
   var C = window.BRCore;
-  var K = { settings: 'br.settings.v1', autoSites: 'br.autoSites.v1', library: 'br.library.v1', history: 'br.history.v1' };
+  var K = { settings: 'br.settings.v1', autoSites: 'br.autoSites.v1', library: 'br.library.v1', history: 'br.history.v1', ui: 'br.popupUi.v1' };
   var P = {
     settings: JSON.parse(JSON.stringify(C.DEFAULT_SETTINGS)),
     autoSites: [],
     library: [],
     history: [],
+    ui: {},
     tabId: null,
     tabHost: '',
     tabUrl: ''
@@ -123,8 +124,17 @@
     });
   }
 
+  // The Always Use Reader section folds up; the choice is a
+  // popup-only preference, kept in its own storage key.
+  function renderListSection() {
+    var collapsed = !!(P.ui && P.ui.listCollapsed);
+    el('sec-list-body').hidden = collapsed;
+    el('sec-list').classList.toggle('collapsed', collapsed);
+  }
+
   function renderDefaults() {
     var s = P.settings;
+    el('all-toggle').checked = !!s.autoAll;
     el('set-follow').checked = !!s.followSystem;
     el('set-wallbreaker').checked = s.wallBreaker !== false;
     var themePairs = Object.keys(C.THEMES).map(function (k) { return [k, C.THEMES[k].label]; });
@@ -148,6 +158,12 @@
     el('cur-toggle').addEventListener('change', function (ev) {
       if (!P.tabHost) return;
       if (ev.target.checked) addSite(P.tabHost); else removeSite(P.tabHost);
+    });
+    el('all-toggle').addEventListener('change', function (ev) { setSetting('autoAll', ev.target.checked); });
+    el('list-head').addEventListener('click', function () {
+      P.ui.listCollapsed = !(P.ui && P.ui.listCollapsed);
+      storageSet(K.ui, P.ui);
+      renderListSection();
     });
     el('add-btn').addEventListener('click', function () {
       if (addSite(el('add-input').value)) el('add-input').value = '';
@@ -374,7 +390,7 @@
   }
 
   function init() {
-    Promise.all([storageGet(K.settings, null), storageGet(K.autoSites, []), activeTab(), storageGet(K.library, []), storageGet(K.history, [])]).then(function (vals) {
+    Promise.all([storageGet(K.settings, null), storageGet(K.autoSites, []), activeTab(), storageGet(K.library, []), storageGet(K.history, []), storageGet(K.ui, {})]).then(function (vals) {
       if (vals[0]) {
         Object.keys(C.DEFAULT_SETTINGS).forEach(function (k) {
           if (vals[0][k] !== undefined) P.settings[k] = vals[0][k];
@@ -389,9 +405,11 @@
       }
       P.library = Array.isArray(vals[3]) ? vals[3] : [];
       P.history = Array.isArray(vals[4]) ? vals[4] : [];
+      P.ui = vals[5] && typeof vals[5] === 'object' ? vals[5] : {};
       wire();
       wireTabs();
       queryReaderState();
+      renderListSection();
       renderSites();
       renderDefaults();
       renderSaved();
@@ -399,7 +417,7 @@
     });
   }
 
-  window.__BRPOPUP = { state: P, addSite: addSite, removeSite: removeSite, setSetting: setSetting, normalizeHost: normalizeHost, removeSaved: removeSaved, clearHistory: clearHistory, renderSaved: renderSaved, renderHistory: renderHistory };
+  window.__BRPOPUP = { state: P, addSite: addSite, removeSite: removeSite, setSetting: setSetting, normalizeHost: normalizeHost, removeSaved: removeSaved, clearHistory: clearHistory, renderSaved: renderSaved, renderHistory: renderHistory, renderListSection: renderListSection };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();

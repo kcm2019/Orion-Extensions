@@ -1,4 +1,22 @@
-# Beautiful Reader for Orion — v1.18.4
+# Beautiful Reader for Orion — v1.18.5
+
+## What's new in v1.18.5
+
+**Auto-open everywhere, plus a tidier popup.** Two popup
+changes, both in the Settings tab:
+
+- **All Sites toggle** — a new switch in the This Site
+  card, right below Reader Mode. When it's on, the reader
+  opens by itself on any site where an article is
+  detected, not just the sites in the Always Use Reader
+  list (the list still works alongside it). It's a global
+  default (`autoAll` in the shared settings), off by
+  default; closing an auto-opened reader still leaves
+  that page alone.
+- **Always Use Reader folds up** — tap its header to
+  collapse or expand the section (the chevron shows the
+  state, and the popup remembers it). The add-a-site box
+  moved to the top of the section, above the list.
 
 ## What's new in v1.18.4
 

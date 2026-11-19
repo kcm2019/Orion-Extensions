@@ -54,5 +54,19 @@ setTimeout(() => {
   const rt = doc.getElementById('reader-toggle');
   rt.checked = false; rt.dispatchEvent(new w.Event('change', { bubbles: true }));
   chk('flipping off sends toggleReader off', sentLog.some(m => m && m.type === 'br:toggleReader' && m.on === false));
+  // v1.18.5: All Sites toggle below Reader Mode
+  const at = doc.getElementById('all-toggle');
+  chk('all-sites toggle exists', !!at);
+  chk('all-sites toggle defaults off', !!at && at.checked === false);
+  at.checked = true; at.dispatchEvent(new w.Event('change', { bubbles: true }));
+  chk('flipping it saves autoAll', store['br.settings.v1'] && store['br.settings.v1'].autoAll === true);
+  // v1.18.5: Always Use Reader collapses; add box above the list
+  const lbody = doc.getElementById('sec-list-body');
+  chk('add box sits above the site list', !!(lbody && lbody.firstElementChild && lbody.firstElementChild.querySelector('#add-input')));
+  chk('list section starts expanded', !!lbody && lbody.hidden === false);
+  doc.getElementById('list-head').dispatchEvent(new w.Event('click', { bubbles: true }));
+  chk('header tap collapses the section', lbody.hidden === true && store['br.popupUi.v1'] && store['br.popupUi.v1'].listCollapsed === true);
+  doc.getElementById('list-head').dispatchEvent(new w.Event('click', { bubbles: true }));
+  chk('second tap expands it again', lbody.hidden === false);
   process.exit(fail ? 1 : 0);
 }, 600);

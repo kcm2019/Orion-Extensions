@@ -3511,7 +3511,9 @@
     S.detected = art;
     if (raceOpenCheck()) return;
     if (sanctuaryCheck()) return;
-    if (S.autoSites.indexOf(S.host) >= 0 && !S.autoOpened) {
+    // Auto-open: the per-site list, or every site when the
+    // popup's All Sites toggle (settings.autoAll) is on.
+    if (!S.autoOpened && (S.autoSites.indexOf(S.host) >= 0 || (S.settings && S.settings.autoAll))) {
       S.autoOpened = true;
       setTimeout(function () { if (!S.open) openReader(); }, 500);
       return;

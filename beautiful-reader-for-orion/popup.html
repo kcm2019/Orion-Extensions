@@ -19,6 +19,9 @@
   section { margin:10px 12px; background:#FFF; border-radius:14px; overflow:hidden; }
   @media (prefers-color-scheme: dark) { section { background:#2C2C2E; } }
   section h2 { font-size:11.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--sub); margin:0; padding:12px 14px 6px; font-weight:700; }
+  .collapse-head { cursor:pointer; display:flex; align-items:center; justify-content:space-between; }
+  .collapse-head .chev { font-size:10px; transition:transform .2s; }
+  section.collapsed .collapse-head .chev { transform:rotate(-90deg); }
   .row { display:flex; align-items:center; gap:10px; padding:10px 14px; border-top:1px solid var(--line); min-height:44px; }
   .row:first-of-type { border-top:0; }
   .row .grow { flex:1; min-width:0; }
@@ -72,14 +75,21 @@
     <label class="switch"><input type="checkbox" id="reader-toggle"><span class="tr"></span></label>
   </div>
   <div class="note">Turn the reader on or off for the page in this tab right now — even on pages where the Reader button wouldn't normally appear.</div>
+  <div class="row">
+    <div class="grow"><div class="host">All Sites</div></div>
+    <label class="switch"><input type="checkbox" id="all-toggle"><span class="tr"></span></label>
+  </div>
+  <div class="note">When this is on, Reader opens by itself on any site where an article is found — no need to add sites to the list below.</div>
 </section>
 
 <section id="sec-list">
-  <h2>Always Use Reader</h2>
-  <div id="site-list"></div>
+  <h2 class="collapse-head" id="list-head">Always Use Reader <span class="chev">▾</span></h2>
+  <div id="sec-list-body">
   <div class="row">
     <input type="text" id="add-input" placeholder="Add a site — e.g. nytimes.com" autocapitalize="none" autocorrect="off">
     <button id="add-btn">Add</button>
+  </div>
+  <div id="site-list"></div>
   </div>
 </section>
 

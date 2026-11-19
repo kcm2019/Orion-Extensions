@@ -46,6 +46,7 @@
     ttsRate: 1,
     scrollSpeed: 40, // px per second for auto-scroll
     wallBreaker: true, // v1.10.0: page-level anti-adblock wall breaking (wallbreaker.js)
+    autoAll: false, // v1.18.5: auto-open the reader on ANY site with a detected article (popup toggle)
     pillPos: null // {side:'left'|'right', top:number}
   };
 

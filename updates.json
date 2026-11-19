@@ -31,6 +31,30 @@
           "update_link": "https://muse.ai/files/665768643292256/1666837661772456/o3752r92g610mupgmovpvjw7/orion-popup-blocker-1.2.0.xpi"
         }
       ]
+    },
+    "heckyeah-orion@local": {
+      "updates": [
+        {
+          "version": "0.12.0",
+          "update_link": "https://muse.ai/files/665768643292256/1902948311069175/33kc4oxzid78jkqm659daf1h/heckyeah-orion-0.12.0.xpi"
+        },
+        {
+          "version": "0.12.1",
+          "update_link": "https://muse.ai/files/665768643292256/2104635980162113/smwzzx629h4gq6cczgkpkljp/heckyeah-orion-0.12.1.xpi"
+        },
+        {
+          "version": "0.12.2",
+          "update_link": "https://muse.ai/files/665768643292256/975551938569226/vdt00m80isdb2x3krzpuybsk/heckyeah-orion-0.12.2.xpi"
+        },
+        {
+          "version": "0.12.3",
+          "update_link": "https://muse.ai/files/665768643292256/1678974293820013/zgsjl7ca7m2oqtzyzj7s9s6o/heckyeah-orion-0.12.3.xpi"
+        },
+        {
+          "version": "0.12.4",
+          "update_link": "https://muse.ai/files/665768643292256/29594504110240703/qjp2yjnise0auyq7jhi9y4ma/heckyeah-orion-0.12.4.xpi"
+        }
+      ]
     }
   }
 }

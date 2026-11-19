@@ -11,7 +11,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '0.12.3';
+  var VERSION = '0.12.4';
   var ADDON_ID = 'heckyeah-orion@local';
   var FEED_URL = 'https://raw.githubusercontent.com/kcm2019/Orion-Extensions/main/updates.json';
   var THROTTLE_MS = 12 * 60 * 60 * 1000; // 12 h between auto checks
@@ -117,6 +117,42 @@
     });
   }
 
+  /* Fetch the feed JSON. Primary: fetch() with NO init object —
+   * some WebKit builds throw on a cache:'no-store' init, and any
+   * throw surfaces as "feed unreachable". Fallback: XMLHttpRequest.
+   * Rejects with the ORIGINAL error so the UI can name the cause. */
+  function fetchFeed(url) {
+    function viaXhr() {
+      return new Promise(function (resolve, reject) {
+        try {
+          if (typeof XMLHttpRequest === 'undefined') { reject(new Error('no-fetch-no-xhr')); return; }
+          var x = new XMLHttpRequest();
+          x.open('GET', url, true);
+          x.responseType = 'json';
+          x.timeout = 15000;
+          x.onload = function () {
+            if (x.status !== 200) { reject(new Error('xhr-http-' + x.status)); return; }
+            var j = x.response;
+            if (j == null) {
+              try { j = JSON.parse(x.responseText); } catch (e) { reject(new Error('xhr-bad-json')); return; }
+            }
+            resolve(j);
+          };
+          x.onerror = function () { reject(new Error('xhr-network-error')); };
+          x.ontimeout = function () { reject(new Error('xhr-timeout')); };
+          x.send();
+        } catch (e) { reject(e); }
+      });
+    }
+    if (typeof fetch === 'undefined') return viaXhr();
+    return fetch(url).then(function (res) {
+      if (!res || res.status !== 200) throw new Error('http-' + (res ? res.status : 'none'));
+      return res.json();
+    }).catch(function (err) {
+      return viaXhr().catch(function () { throw err; });
+    });
+  }
+
   /* ---------- the check ---------- */
 
   /* checkNow(force) -> Promise<{state:'update'|'current'|'error', ...}>.
@@ -136,15 +172,7 @@
         return { state: 'current', version: currentVersion(), cached: true };
       }
       var url = (typeof st.upd_feed_url === 'string' && st.upd_feed_url) ? st.upd_feed_url : FEED_URL;
-      if (typeof fetch === 'undefined') {
-        return storageSet({ upd_last_check: now }).then(function () {
-          return { state: 'error', error: 'no-fetch' };
-        });
-      }
-      return fetch(url, { cache: 'no-store' }).then(function (res) {
-        if (!res || res.status !== 200) throw new Error('http-' + (res ? res.status : 'none'));
-        return res.json();
-      }).then(function (json) {
+      return fetchFeed(url).then(function (json) {
         var found = pickUpdate(json, ADDON_ID, currentVersion());
         if (found) {
           var avail = { version: found.version, update_link: found.update_link, found_at: now };

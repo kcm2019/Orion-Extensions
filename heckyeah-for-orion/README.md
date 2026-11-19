@@ -1,3 +1,21 @@
+# HeckYeah for Orion — v0.12.4
+
+Update checker, fixed end to end + collapsible popup sections:
+- The checker could never find a HeckYeah update: the feed
+  (updates.json in Orion-Extensions) only carried Beautiful
+  Reader and Popup Blocker — heckyeah-orion@local was never
+  added. It is now (0.12.0–0.12.4 entries). The feed itself is
+  public and CORS-open (verified: HTTP 200, ACAO *).
+- The on-device check still failed with "feed unreachable":
+  the checker fetched with a {cache:'no-store'} init, which
+  some WebKit builds throw on. fetchFeed() now calls fetch()
+  with no init and falls back to XMLHttpRequest, and a failed
+  MANUAL check now shows the real error in parentheses instead
+  of the generic message.
+- Popup sections collapse: tap the CONTINUE WATCHING or any
+  shelf header (Stream Aggregators, P-Stream Forks, …) to fold
+  it; the chevron flips and the state persists (popCollapsed).
+
 # HeckYeah for Orion — v0.12.3
 
 Back to v0.12.0 (Kurt's call): the popup is the streaming-only

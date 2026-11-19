@@ -43,7 +43,13 @@ function renderHome() {
   viewEl.innerHTML = '';
   var entries = (store.entries || []).filter(function (e) { return !H.isFinished(e); });
   if (entries.length) {
-    viewEl.appendChild(el('div', 'sect', 'CONTINUE WATCHING'));
+    var cHead = el('div', 'sect');
+    cHead.appendChild(el('span', '', 'CONTINUE WATCHING'));
+    var cChev = el('span', 'chev', '');
+    cHead.appendChild(cChev);
+    viewEl.appendChild(cHead);
+    var cBody = el('div', '');
+    viewEl.appendChild(cBody);
     var groups = H.groupByShow(entries);
     groups.forEach(function (g) {
       var e = g.latest;
@@ -68,8 +74,9 @@ function renderHome() {
         card.appendChild(bar);
       }
       card.addEventListener('click', function () { openTab(e.url); });
-      viewEl.appendChild(card);
+      cBody.appendChild(card);
     });
+    attachCollapse(cHead, cBody, cChev, 'continue');
   }
   var holder = el('div', '');
   holder.appendChild(el('div', 'loading', 'Loading streaming sites…'));
@@ -91,12 +98,34 @@ function renderHome() {
     });
 }
 
+/* Collapsible section: tap the header to fold/unfold its body.
+ * State persists in the store (popCollapsed) so the menu reopens
+ * the way you left it. */
+function attachCollapse(head, body, chev, key) {
+  if (!store.popCollapsed) store.popCollapsed = {};
+  function paint() {
+    var c = !!store.popCollapsed[key];
+    body.style.display = c ? 'none' : '';
+    chev.textContent = c ? '\u25b8' : '\u25be';
+  }
+  paint();
+  head.addEventListener('click', function () {
+    store.popCollapsed[key] = !store.popCollapsed[key];
+    H.saveStore(store);
+    paint();
+  });
+}
+
 /* ---------- streaming shelves ---------- */
 function renderPopShelves(holder, sections) {
   if (!store.favorites) store.favorites = {};
   if (!store.siteOrder) store.siteOrder = {};
   sections.forEach(function (s) {
-    holder.appendChild(el('div', 'sect', s.title.toUpperCase()));
+    var sHead = el('div', 'sect');
+    sHead.appendChild(el('span', '', s.title.toUpperCase()));
+    var sChev = el('span', 'chev', '');
+    sHead.appendChild(sChev);
+    holder.appendChild(sHead);
     var list = el('div', 'tiles');
     var key = H.shelfKey(s);
     H.sortSites(s.items, key, store).slice(0, 60).forEach(function (it) {
@@ -123,6 +152,7 @@ function renderPopShelves(holder, sections) {
       list.appendChild(b);
     });
     holder.appendChild(list);
+    attachCollapse(sHead, list, sChev, 'shelf:' + key);
   });
 }
 
@@ -289,7 +319,7 @@ function runUpdCheck(force) {
       if (updStatusEl) {
         if (res.state === 'update') updStatusEl.textContent = 'Update available: v' + res.version;
         else if (res.state === 'current') updStatusEl.textContent = 'You\u2019re on the latest version (v' + U.currentVersion() + ')';
-        else updStatusEl.textContent = 'Couldn\u2019t check for updates (feed unreachable)';
+        else updStatusEl.textContent = 'Couldn\u2019t check for updates (' + (res.error || 'feed unreachable') + ')';
       }
       refreshUpdFromStore();
     }, function () {

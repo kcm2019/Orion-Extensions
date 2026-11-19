@@ -415,6 +415,8 @@ function test(name, fn) {
     const pop = fs.readFileSync(__dirname + '/../popup.js', 'utf8');
     assert.ok(pop.includes('attachPopDrag'), 'drag reorder in the popup too');
     assert.ok(pop.includes('renderPopShelves'), 'popup renders streaming shelves');
+    assert.ok(pop.includes('attachCollapse'), 'popup sections are collapsible');
+    assert.ok(pop.includes('popCollapsed'), 'collapsed state persists');
   });
 
   await test('update checker: wired into app view + popup, not the tracker', () => {
@@ -443,9 +445,9 @@ function test(name, fn) {
     assert.ok(common.includes('fin(null); }, 3000'), 'storage read self-resolves after 3 s');
   });
 
-  await test('manifest parses, version 0.12.3, files exist', () => {
+  await test('manifest parses, version 0.12.4, files exist', () => {
     const m = JSON.parse(fs.readFileSync(__dirname + '/../manifest.json', 'utf8'));
-    assert.strictEqual(m.version, '0.12.3');
+    assert.strictEqual(m.version, '0.12.4');
     assert.strictEqual(m.manifest_version, 2);
     m.content_scripts.forEach((cs) => {
       (cs.js || []).forEach((f) => assert.ok(fs.existsSync(__dirname + '/../' + f), f));

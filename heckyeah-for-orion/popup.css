@@ -24,7 +24,8 @@ body {
   align-self: center;
 }
 .loading, .empty { color: #9fb0c9; font-size: 13px; padding: 16px 2px; line-height: 1.5; }
-.sect { font-size: 11px; font-weight: 700; letter-spacing: 1.1px; color: #7d8494; margin: 14px 0 8px; }
+.sect { font-size: 11px; font-weight: 700; letter-spacing: 1.1px; color: #7d8494; margin: 14px 0 8px; display: flex; align-items: center; cursor: pointer; }
+.sect .chev { margin-left: auto; font-size: 10px; opacity: 0.6; letter-spacing: 0; }
 .sect:first-child { margin-top: 2px; }
 .cats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .cat, .tile, .cont {

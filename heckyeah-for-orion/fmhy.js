@@ -431,7 +431,7 @@
         if (updStatus) {
           if (res.state === 'update') updStatus.textContent = 'Update available: v' + res.version;
           else if (res.state === 'current') updStatus.textContent = 'You\u2019re on the latest version (v' + U.currentVersion() + ')';
-          else updStatus.textContent = 'Couldn\u2019t check for updates (feed unreachable)';
+          else updStatus.textContent = 'Couldn\u2019t check for updates (' + (res.error || 'feed unreachable') + ')';
         }
         refreshUpdFromStore();
       }, function () {
@@ -576,7 +576,7 @@
       }
 
       var diag = el('div', 'hyo-diag',
-        'HeckYeah for Orion 0.12.3 \u00b7 storage: ' + store.storageMode +
+        'HeckYeah for Orion 0.12.4 \u00b7 storage: ' + store.storageMode +
         ' \u00b7 visits ' + store.visits +
         ' \u00b7 tracked ' + store.entries.length +
         ' \u00b7 sweep removals ' + (store.sweepCount || 0));

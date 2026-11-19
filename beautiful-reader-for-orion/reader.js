@@ -63,7 +63,8 @@
     host: C.hostOf(location.href), detected: null, pill: null, pillShrunk: false,
     reader: null, content: null, articleEl: null, bar: null, statusEl: null,
     current: null, headings: [], open: false, dismissed: false, autoOpened: false,
-    aaScope: 'global', stitching: false, saveTimer: null, selBar: null
+    aaScope: 'global', stitching: false, saveTimer: null, selBar: null,
+    embedLoadMs: 9000 // social iframe load watchdog (v1.18.6)
   };
 
   function perSite() { return S.perSite[S.host] || null; }
@@ -1098,6 +1099,25 @@
     r.addEventListener('mouseup', maybeShowSelBar);
     r.addEventListener('touchend', function () { setTimeout(maybeShowSelBar, 60); });
     art.addEventListener('click', function (ev) {
+      // In-article links: a plain tap on one inside the
+      // reader's top-layer popover does not navigate on Orion
+      // (the links wear target="_blank"; the tap lands and
+      // nothing happens, though long-press still offers the
+      // link). Open deliberately instead — a new tab when the
+      // browser allows it, this tab when it doesn't — so a
+      // tap always goes somewhere (v1.18.6).
+      var a = ev.target && ev.target.closest ? ev.target.closest('a[href]') : null;
+      if (a && !a.classList.contains('br-fnref')) {
+        var href = a.getAttribute('href') || '';
+        if (/^https?:\/\//i.test(href)) {
+          ev.preventDefault();
+          hideFootnote();
+          var w = null;
+          try { w = window.open(href, '_blank'); } catch (e) {}
+          if (!w) { try { location.href = href; } catch (e) {} }
+          return;
+        }
+      }
       var fn = ev.target && ev.target.closest ? ev.target.closest('.br-fnref') : null;
       if (fn) { showFootnote(fn); return; }
       hideFootnote();
@@ -1224,7 +1244,7 @@
       else if (b.type === 'embed') {
         var ew = el('div', 'br-embed');
         var ifr = el('iframe');
-        ifr.src = b.src; ifr.setAttribute('allowfullscreen', '');
+        ifr.setAttribute('data-src', b.src); ifr.setAttribute('allowfullscreen', '');
         ifr.setAttribute('allow', 'autoplay; fullscreen; picture-in-picture; encrypted-media');
         ifr.loading = 'lazy';
         ew.appendChild(ifr);
@@ -1245,7 +1265,9 @@
         sw.appendChild(sh);
         if (b.embedUrl) {
           var sif = el('iframe');
-          sif.src = b.embedUrl; sif.loading = 'lazy';
+          // No src yet: activateEmbeds() assigns it once the
+          // reader is fully up (see there for why).
+          sif.setAttribute('data-src', b.embedUrl); sif.__brBlock = b; sif.loading = 'lazy';
           sif.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups');
           sif.setAttribute('allow', 'autoplay; fullscreen; picture-in-picture; encrypted-media');
           sif.className = 'br-social-frame';
@@ -1285,6 +1307,45 @@
     });
   }
 
+  // Embeds (social posts, videos) start loading only once the
+  // reader is fully up and any page-kill has already run: an
+  // iframe that begins loading and then meets window.stop()
+  // sits blank forever, and the purge used to remove the
+  // reader's own frames along with the page's. The embed URLs
+  // are built by the reader itself from the post links found
+  // at extraction (C.socialFromUrl), so the content loads from
+  // the platform directly, whatever state the page is in.
+  function activateEmbeds() {
+    if (!S.reader) return;
+    var frames = S.reader.querySelectorAll('iframe[data-src]');
+    for (var i = 0; i < frames.length; i++) {
+      var f = frames[i];
+      var src = f.getAttribute('data-src');
+      f.removeAttribute('data-src');
+      if (f.classList.contains('br-social-frame')) armSocialWatchdog(f);
+      f.src = src;
+    }
+  }
+
+  // If a social embed never finishes loading (platform
+  // blocked, network, a kill that landed mid-load), swap the
+  // blank frame for the post text captured at extraction, so
+  // the card is never an empty box.
+  function armSocialWatchdog(f) {
+    var loaded = false;
+    f.addEventListener('load', function () { loaded = true; });
+    setTimeout(function () {
+      if (loaded || !f.isConnected || !f.parentNode) return;
+      var b = f.__brBlock;
+      if (!b) return;
+      var frag = document.createDocumentFragment();
+      if (b.text) frag.appendChild(el('p', 'br-social-text', b.text));
+      if (b.author) frag.appendChild(el('p', 'br-social-author', b.author));
+      if (!b.text && !b.author) frag.appendChild(el('p', 'br-social-text', 'This post could not be loaded here.'));
+      f.parentNode.replaceChild(frag, f);
+    }, S.embedLoadMs || 9000);
+  }
+
   // Re-render after a view-mode change (text-only) without
   // losing the reader's place.
   function rerenderKeepScroll() {
@@ -1293,6 +1354,7 @@
     var max = r.scrollHeight - r.clientHeight;
     var frac = max > 0 ? r.scrollTop / max : 0;
     renderCurrent();
+    activateEmbeds();
     restoreHighlights();
     var max2 = r.scrollHeight - r.clientHeight;
     r.scrollTop = frac * Math.max(0, max2);
@@ -1428,6 +1490,8 @@
     // v1.13.0's kill waited for two lost restore fights and a
     // reload reset the counter before they could accumulate).
     if (pageHostile()) killPage();
+    // Only now — kill already run — may embeds start loading.
+    activateEmbeds();
   }
 
   function openSavedArticle(item) {
@@ -1457,6 +1521,7 @@
     showReaderShell();
     if (eff().autoScroll) scrollStart();
     restoreProgressAndHighlights();
+    activateEmbeds();
   }
 
   // ---------- late-loading images ----------
@@ -3478,7 +3543,13 @@
   function purgePageDom() {
     try {
       var dead = document.querySelectorAll('script, iframe, object, embed');
-      for (var i = 0; i < dead.length; i++) { try { dead[i].remove(); } catch (e) {} }
+      for (var i = 0; i < dead.length; i++) {
+        // The reader's own embeds are not the page's — purging
+        // them left social cards as empty shells (v1.18.6).
+        if (S.reader && S.reader.contains(dead[i])) continue;
+        if (S.pill && S.pill.contains(dead[i])) continue;
+        try { dead[i].remove(); } catch (e) {}
+      }
       // A meta refresh is a reload with a timer we cannot clear
       // from here — the tag itself has to go.
       var metas = document.querySelectorAll('meta');

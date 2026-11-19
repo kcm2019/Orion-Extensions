@@ -1,4 +1,35 @@
-# Beautiful Reader for Orion — v1.18.5
+# Beautiful Reader for Orion — v1.18.6
+
+## What's new in v1.18.6
+
+**Embeds load on the reader's terms, and link taps work.**
+Two field reports from the same article (thebiglead): an X
+card that rendered as an empty outline, and article links
+that ignored taps (long-press still worked).
+
+- **Embed loading is deferred until the reader is safe.**
+  Social and video iframes used to start loading during
+  the render — and on a hostile page the kill that follows
+  (`window.stop()` plus the DOM purge) aborted or outright
+  removed them. The purge also had a plain bug: it removed
+  every iframe in the document, including the reader's
+  own. Now frames are rendered without a src, the purge
+  exempts anything inside the reader, and srcs are
+  assigned only after the kill has run. The embed URLs
+  were already built by the reader from the post links
+  (the platform's official embed endpoints), so content
+  now loads from the platform directly, whatever state
+  the page underneath is in.
+- **No more empty social cards.** If a social frame
+  hasn't loaded after ~9 seconds, it's swapped for the
+  post text and author captured at extraction, with the
+  View-on-platform link kept — the card always shows the
+  post, one way or the other.
+- **Link taps navigate.** In-article links wear
+  `target="_blank"`, and a tap on one inside the reader's
+  top-layer popover doesn't navigate on Orion. Taps are
+  now handled deliberately: open in a new tab when the
+  browser allows it, in the current tab when it doesn't.
 
 ## What's new in v1.18.5
 

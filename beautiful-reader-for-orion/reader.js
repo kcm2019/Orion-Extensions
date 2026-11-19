@@ -111,9 +111,9 @@
     '.br-article{margin:0 auto;padding:28px 22px 90px;width:100%;box-sizing:border-box;max-width:var(--br-width)}',
     '.br-kicker{display:flex;align-items:center;gap:7px;font:700 12px -apple-system,system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#0A84FF;margin-bottom:12px}',
     '.br-favicon{width:16px;height:16px;border-radius:4px;flex:none}',
-    '.br-title{font-size:32px;line-height:1.18;font-weight:800;letter-spacing:-.01em;margin:0 0 12px}',
+    '.br-title{font-family:var(--br-font-head,var(--br-font));font-size:32px;line-height:1.18;font-weight:var(--br-font-head-weight,800);letter-spacing:-.01em;margin:0 0 12px}',
     '.br-meta{color:var(--br-secondary);font-size:14px;line-height:1.5;margin-bottom:26px;font-family:-apple-system,system-ui,sans-serif}',
-    '.br-subtitle{font-style:italic;color:var(--br-secondary);font-size:20px;line-height:1.45;margin:0 0 14px;font-weight:500}',
+    '.br-subtitle{font-family:var(--br-font-head,var(--br-font));font-style:italic;color:var(--br-secondary);font-size:20px;line-height:1.45;margin:0 0 14px;font-weight:500}',
     '.br-hero video{width:100%;height:auto;border-radius:14px;display:block;background:#000;box-shadow:0 14px 38px rgba(0,0,0,.22),0 3px 10px rgba(0,0,0,.14)}',
     '.br-body video{width:100%;height:auto;border-radius:12px;display:block;background:#000;box-shadow:0 12px 32px rgba(0,0,0,.20),0 2px 8px rgba(0,0,0,.12)}',
     '.br-embed{position:relative;width:100%;padding-top:56.25%;border-radius:12px;overflow:hidden;background:#000;box-shadow:0 12px 32px rgba(0,0,0,.20),0 2px 8px rgba(0,0,0,.12)}',
@@ -1145,6 +1145,17 @@
     r.style.setProperty('--br-code', t.codeBg);
     r.style.setProperty('--br-mark', t.mark);
     r.style.setProperty('--br-font', fontStackFor(e));
+    // 'Website Font' also adopts the page's headline face (and
+    // its weight) for the title and standfirst when it differs.
+    var headStack = e.font === 'website' ? siteHeadingFontStack() : null;
+    if (headStack && headStack !== fontStackFor(e)) {
+      r.style.setProperty('--br-font-head', headStack);
+      if (S.siteHeadWeight) r.style.setProperty('--br-font-head-weight', String(S.siteHeadWeight));
+      else r.style.removeProperty('--br-font-head-weight');
+    } else {
+      r.style.removeProperty('--br-font-head');
+      r.style.removeProperty('--br-font-head-weight');
+    }
     r.style.setProperty('--br-size', (e.fontSize || 19) + 'px');
     r.style.setProperty('--br-lh', String(e.lineHeight || 1.65));
     r.style.setProperty('--br-width', (C.WIDTHS[e.width] || 680) + 'px');
@@ -1548,6 +1559,11 @@
     }
   }
 
+  function sanitizeFontStack(ff) {
+    ff = String(ff || '').replace(/[;{}<>]/g, '').trim().slice(0, 300);
+    return ff && /[a-zA-Z]/.test(ff) ? ff : null;
+  }
+
   // The 'Website Font' choice: adopt the font the page itself uses
   // for its article text (computed from an article paragraph, else
   // the body), resolved once per page.
@@ -1557,11 +1573,40 @@
     try {
       if (!window.getComputedStyle) return null;
       var el = document.querySelector('article p, main p, [role="main"] p') || document.querySelector('p') || document.body;
-      if (!el) return null;
-      var ff = String(window.getComputedStyle(el).fontFamily || '').replace(/[;{}<>]/g, '').trim().slice(0, 300);
-      if (ff && /[a-zA-Z]/.test(ff)) S.siteFont = ff;
+      if (el) S.siteFont = sanitizeFontStack(window.getComputedStyle(el).fontFamily);
     } catch (e) {}
+    // A capture attempted while the page is still parsing may
+    // have found nothing worth keeping; don't let it stick.
+    if (!S.siteFont && document.readyState === 'loading') S.siteFont = undefined;
     return S.siteFont;
+  }
+
+  // The headline's own font, for 'Website Font' mode: many sites
+  // set a display face on the headline and a different text face
+  // on the paragraphs (a serif headline over a sans body, say).
+  // Captured from the article's h1 under the same rules, along
+  // with its weight — display faces often ship a single weight,
+  // and the reader's heavy title weight would be synthesized
+  // from it badly. The stack drives the reader's title and
+  // standfirst, the elements that mirror the page's own header;
+  // in-article headings keep the body stack.
+  function siteHeadingFontStack() {
+    if (S.siteHeadFont !== undefined) return S.siteHeadFont;
+    S.siteHeadFont = null;
+    S.siteHeadWeight = null;
+    try {
+      if (!window.getComputedStyle) return null;
+      var el = document.querySelector('article h1, main h1, [role="main"] h1') || document.querySelector('h1');
+      if (el && S.reader && S.reader.contains(el)) el = null; // never the reader's own title
+      if (el) {
+        var cs = window.getComputedStyle(el);
+        S.siteHeadFont = sanitizeFontStack(cs.fontFamily);
+        var wgt = parseInt(cs.fontWeight, 10);
+        if (!isNaN(wgt) && wgt >= 100 && wgt <= 900) S.siteHeadWeight = wgt;
+      }
+    } catch (e) {}
+    if (!S.siteHeadFont && document.readyState === 'loading') { S.siteHeadFont = undefined; S.siteHeadWeight = undefined; }
+    return S.siteHeadFont;
   }
   function fontStackFor(e) {
     if (e.font === 'website') return siteFontStack() || C.FONTS.newyork.stack;

@@ -1,4 +1,22 @@
-# Beautiful Reader for Orion — v1.18.3
+# Beautiful Reader for Orion — v1.18.4
+
+## What's new in v1.18.4
+
+**Website Font mode now adopts the headline's font too.**
+It used to copy only the article paragraphs' font, so on
+sites that set a display face on the headline and a text
+face on the body — Patagonia is the reported case: a
+"Copernicus" serif headline over a "Ridgeway Sans" body —
+the reader title came out in the body sans. The mode now
+also captures the article h1's computed font stack and
+weight, and applies them to the reader's title and
+standfirst (the elements that mirror the page's own
+header). In-article headings keep the body stack, and
+named fonts are untouched. Because the reader lives in
+the same document, the site's own loaded webfont is what
+renders — no substitute face. One catch to know: the
+setting only takes effect when the font choice is
+Website Font (globally, or per-site in the gear menu).
 
 ## What's new in v1.18.3
 

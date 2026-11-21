@@ -20,20 +20,29 @@
 
   function storageGet(key, fallback) {
     return new Promise(function (resolve) {
+      var done = false;
+      function finish(v) { if (!done) { done = true; resolve(v); } }
+      // A wedged extension context can leave the storage
+      // promise pending forever — and a menu that never
+      // populates reads as a menu that never opened. Cap the
+      // wait and fall back to the local copy (v1.18.8).
+      var timer = setTimeout(function () { lsGet(); }, 1500);
+      function ok(v) { clearTimeout(timer); finish(v); }
       try {
         if (window.browser && browser.storage && browser.storage.local) {
-          browser.storage.local.get(key).then(function (o) { resolve(o && o[key] !== undefined ? o[key] : fallback); }, function () { lsGet(); });
+          browser.storage.local.get(key).then(function (o) { ok(o && o[key] !== undefined ? o[key] : fallback); }, function () { clearTimeout(timer); lsGet(); });
           return;
         }
         if (window.chrome && chrome.storage && chrome.storage.local) {
-          chrome.storage.local.get(key, function (o) { resolve(o && o[key] !== undefined ? o[key] : fallback); });
+          chrome.storage.local.get(key, function (o) { ok(o && o[key] !== undefined ? o[key] : fallback); });
           return;
         }
       } catch (e) {}
+      clearTimeout(timer);
       lsGet();
       function lsGet() {
-        try { var v = localStorage.getItem('br:' + key); resolve(v ? JSON.parse(v) : fallback); }
-        catch (e) { resolve(fallback); }
+        try { var v = localStorage.getItem('br:' + key); finish(v ? JSON.parse(v) : fallback); }
+        catch (e) { finish(fallback); }
       }
     });
   }
@@ -375,17 +384,21 @@
 
   function activeTab() {
     return new Promise(function (resolve) {
+      var done = false;
+      function finish(v) { if (!done) { done = true; resolve(v); } }
+      var timer = setTimeout(function () { finish(null); }, 1200);
+      function ok(v) { clearTimeout(timer); finish(v); }
       try {
         if (window.browser && browser.tabs && browser.tabs.query) {
-          browser.tabs.query({ active: true, currentWindow: true }).then(function (tabs) { resolve(tabs && tabs[0]); }, function () { resolve(null); });
+          browser.tabs.query({ active: true, currentWindow: true }).then(function (tabs) { ok(tabs && tabs[0]); }, function () { ok(null); });
           return;
         }
         if (window.chrome && chrome.tabs && chrome.tabs.query) {
-          chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) { resolve(tabs && tabs[0]); });
+          chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) { ok(tabs && tabs[0]); });
           return;
         }
       } catch (e) {}
-      resolve(null);
+      ok(null);
     });
   }
 
@@ -409,6 +422,13 @@
       wire();
       wireTabs();
       queryReaderState();
+      // When the menu is hosted in the reader's in-page
+      // panel (popup.html embedded in an iframe), tell the
+      // parent the real menu is alive so it doesn't swap in
+      // the fallback controls (v1.18.8).
+      try {
+        if (window.parent && window.parent !== window) window.parent.postMessage('br:popup-ready', '*');
+      } catch (e) {}
       renderListSection();
       renderSites();
       renderDefaults();

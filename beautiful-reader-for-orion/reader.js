@@ -64,7 +64,8 @@
     reader: null, content: null, articleEl: null, bar: null, statusEl: null,
     current: null, headings: [], open: false, dismissed: false, autoOpened: false,
     aaScope: 'global', stitching: false, saveTimer: null, selBar: null,
-    embedLoadMs: 9000 // social iframe load watchdog (v1.18.6)
+    embedLoadMs: 9000, // social iframe load watchdog (v1.18.6)
+    menuReadyMs: 2500 // in-page menu panel handshake (v1.18.8)
   };
 
   function perSite() { return S.perSite[S.host] || null; }
@@ -1082,7 +1083,7 @@
       drag = { x: ev.clientX, y: ev.clientY, top: pill.offsetTop, left: pill.offsetLeft };
       moved = false; longFired = false;
       try { pill.setPointerCapture(ev.pointerId); } catch (e) {}
-      longTimer = setTimeout(function () { longFired = true; openLibrary(); }, 650);
+      longTimer = setTimeout(function () { longFired = true; openMenuPanel(); }, 650);
     });
     pill.addEventListener('pointermove', function (ev) {
       if (!drag) return;
@@ -3126,8 +3127,143 @@
     });
   }
 
+  // ---------- in-page menu panel (v1.18.8) ----------
+  // Orion intermittently swallows the toolbar popup: the
+  // icon is tapped and no menu appears until the browser is
+  // restarted. The popup webview is Orion's surface; the
+  // content script is ours. So the menu gets a second door
+  // that never leaves the page: long-press the pill and the
+  // same popup UI opens in a panel, hosted in an iframe
+  // (popup.html is web-accessible for exactly this). If the
+  // iframe doesn't announce itself in time — Orion refused
+  // the embed, or the popup context is the wedged part —
+  // the panel swaps in native controls for the essentials,
+  // so the menu comes up either way.
+  var MENU_CSS = [
+    '#br-menuback{position:fixed;inset:0;z-index:2147483640;background:rgba(0,0,0,.18);opacity:0;pointer-events:none;transition:opacity .22s}',
+    '#br-menuback.br-on{opacity:1;pointer-events:auto}',
+    '#br-menupanel{position:fixed;top:12px;right:12px;z-index:2147483641;width:min(384px,94vw);height:min(608px,82vh);display:flex;flex-direction:column;border-radius:18px;overflow:hidden;background:rgba(250,250,252,.94);-webkit-backdrop-filter:blur(22px) saturate(1.5);backdrop-filter:blur(22px) saturate(1.5);box-shadow:0 18px 50px rgba(0,0,0,.30),inset 0 0 0 1px rgba(0,0,0,.06);opacity:0;transform:translateY(-8px) scale(.98);pointer-events:none;transition:opacity .22s,transform .22s;font-family:-apple-system,system-ui,sans-serif;color:#1c1c1e}',
+    '#br-menupanel.br-on{opacity:1;transform:none;pointer-events:auto}',
+    '@media (prefers-color-scheme: dark){#br-menupanel{background:rgba(30,30,32,.94);color:#f2f2f7}}',
+    '.br-menu-head{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:1px solid rgba(120,120,128,.18);font-weight:700;font-size:13.5px;flex:none}',
+    '.br-menu-x{appearance:none;border:0;background:rgba(120,120,128,.16);color:inherit;width:26px;height:26px;border-radius:50%;font-size:12px;cursor:pointer;flex:none;padding:0}',
+    '.br-menu-body{flex:1;display:flex;flex-direction:column;min-height:0}',
+    '#br-menuframe{flex:1;width:100%;border:0;background:transparent}',
+    '.br-menu-fb{padding:6px 0;overflow-y:auto}',
+    '.br-menu-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid rgba(120,120,128,.14);font-size:14px;font-weight:500}',
+    '.br-menu-note{padding:10px 14px;color:#8a8a8e;font-size:12px;line-height:1.45;margin:0}',
+    '.br-menu-btn{appearance:none;border:0;background:#0A84FF;color:#fff;font-weight:600;font-size:13.5px;padding:8px 16px;border-radius:999px;cursor:pointer}',
+    '.br-sw{position:relative;width:48px;height:28px;flex:none;display:inline-block}',
+    '.br-sw input{opacity:0;width:100%;height:100%;position:absolute;left:0;top:0;margin:0;cursor:pointer;z-index:1}',
+    '.br-sw>span{position:absolute;inset:0;background:rgba(120,120,128,.32);border-radius:999px;transition:background .2s}',
+    '.br-sw>span:before{content:"";position:absolute;left:2px;top:2px;width:24px;height:24px;background:#fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.25);transition:transform .2s}',
+    '.br-sw input:checked + span{background:#34C759}',
+    '.br-sw input:checked + span:before{transform:translateX(20px)}'
+  ].join('\n');
+  var menuPanelEl = null, menuBackEl = null, menuReady = false, menuWatch = 0, menuWired = false;
+
+  function extUrl(path) {
+    try {
+      var rt = (window.browser && browser.runtime) || (window.chrome && chrome.runtime);
+      if (rt && rt.getURL) return rt.getURL(path);
+    } catch (e) {}
+    return '';
+  }
+
+  function buildMenuPanel() {
+    if (menuPanelEl) return;
+    var st = document.createElement('style');
+    st.id = 'br-menucss';
+    st.textContent = MENU_CSS;
+    document.head.appendChild(st);
+    menuBackEl = el('div'); menuBackEl.id = 'br-menuback';
+    menuBackEl.addEventListener('click', closeMenuPanel);
+    document.body.appendChild(menuBackEl);
+    menuPanelEl = el('div'); menuPanelEl.id = 'br-menupanel';
+    var head = el('div', 'br-menu-head');
+    head.appendChild(el('span', '', 'Beautiful Reader'));
+    var x = el('button', 'br-menu-x', '✕');
+    x.addEventListener('click', closeMenuPanel);
+    head.appendChild(x);
+    menuPanelEl.appendChild(head);
+    var body = el('div', 'br-menu-body');
+    menuPanelEl.appendChild(body);
+    document.body.appendChild(menuPanelEl);
+    if (!menuWired) {
+      menuWired = true;
+      window.addEventListener('message', function (ev) {
+        if (ev && ev.data === 'br:popup-ready') { menuReady = true; clearTimeout(menuWatch); }
+      });
+      document.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Escape' && menuPanelEl && menuPanelEl.classList.contains('br-on')) closeMenuPanel();
+      });
+    }
+  }
+
+  function openMenuPanel() {
+    buildMenuPanel();
+    menuReady = false;
+    var body = menuPanelEl.querySelector('.br-menu-body');
+    body.innerHTML = '';
+    var frame = document.createElement('iframe');
+    frame.id = 'br-menuframe';
+    body.appendChild(frame);
+    menuBackEl.classList.add('br-on');
+    menuPanelEl.classList.add('br-on');
+    var url = extUrl('popup.html');
+    if (!url) { buildMenuFallback(); return; }
+    frame.src = url;
+    clearTimeout(menuWatch);
+    menuWatch = setTimeout(function () { if (!menuReady) buildMenuFallback(); }, S.menuReadyMs || 2500);
+  }
+
+  function closeMenuPanel() {
+    clearTimeout(menuWatch);
+    if (menuBackEl) menuBackEl.classList.remove('br-on');
+    if (menuPanelEl) menuPanelEl.classList.remove('br-on');
+  }
+
+  function menuSwitch(on, fn) {
+    var lab = el('label', 'br-sw');
+    var inp = document.createElement('input');
+    inp.type = 'checkbox'; inp.checked = !!on;
+    inp.addEventListener('change', function () { fn(inp.checked); });
+    lab.appendChild(inp);
+    lab.appendChild(el('span'));
+    return lab;
+  }
+
+  function buildMenuFallback() {
+    if (!menuPanelEl) return;
+    var body = menuPanelEl.querySelector('.br-menu-body');
+    if (!body || body.querySelector('.br-menu-fb')) return;
+    body.innerHTML = '';
+    var fb = el('div', 'br-menu-fb');
+    var r1 = el('div', 'br-menu-row');
+    r1.appendChild(el('span', '', 'Reader Mode'));
+    var btn = el('button', 'br-menu-btn', S.open ? 'Close' : 'Open');
+    btn.addEventListener('click', function () { closeMenuPanel(); if (S.open) closeReader(); else openReader(); });
+    r1.appendChild(btn);
+    fb.appendChild(r1);
+    var r2 = el('div', 'br-menu-row');
+    r2.appendChild(el('span', '', 'Always use Reader — ' + S.host));
+    fb.appendChild(r2);
+    r2.appendChild(menuSwitch(S.autoSites.indexOf(S.host) >= 0, function (on) {
+      var i = S.autoSites.indexOf(S.host);
+      if (on && i < 0) S.autoSites.push(S.host);
+      if (!on && i >= 0) S.autoSites.splice(i, 1);
+      storageSet(K.autoSites, S.autoSites);
+    }));
+    var r3 = el('div', 'br-menu-row');
+    r3.appendChild(el('span', '', 'All Sites — Reader opens everywhere'));
+    r3.appendChild(menuSwitch(!!(S.settings && S.settings.autoAll), function (on) { writeGlobal({ autoAll: on }); }));
+    fb.appendChild(r3);
+    fb.appendChild(el('p', 'br-menu-note', 'The full menu could not be embedded on this page, so these are the essentials. Saved, History and the full settings live in the toolbar menu.'));
+    body.appendChild(fb);
+  }
+
   function openLibrary() {
-    // Pill long-press entry point: build the shell, then show the library.
+    // Gear-menu entry point: build the shell, then show the library.
     buildReader();
     if (!S.current) {
       S.current = S.detected || { title: '', byline: '', date: '', site: S.host, url: location.href, hero: '', blocks: [], wordCount: 0, fromLibrary: true };
@@ -3624,6 +3760,17 @@
   // re-insert is removed again, so the reader sits alone on
   // an empty stage. Closing the reader leaves the dead page;
   // a reload brings the site back.
+  // True when the node lives inside any Beautiful Reader UI
+  // (ids are br-* by convention: reader, pill, menu panel…).
+  function insideBrUi(node) {
+    var n = node, depth = 0;
+    while (n && depth < 12) {
+      if (n.id && n.id.indexOf('br-') === 0) return true;
+      n = n.parentElement; depth++;
+    }
+    return false;
+  }
+
   function killPage() {
     if (S.pageKilled) return;
     S.pageKilled = true;
@@ -3641,10 +3788,10 @@
     try {
       var dead = document.querySelectorAll('script, iframe, object, embed');
       for (var i = 0; i < dead.length; i++) {
-        // The reader's own embeds are not the page's — purging
-        // them left social cards as empty shells (v1.18.6).
-        if (S.reader && S.reader.contains(dead[i])) continue;
-        if (S.pill && S.pill.contains(dead[i])) continue;
+        // Our own UI is not the page's — purging the reader's
+        // embeds left social cards as empty shells (v1.18.6),
+        // and the menu panel's iframe is ours too (v1.18.8).
+        if (insideBrUi(dead[i])) continue;
         try { dead[i].remove(); } catch (e) {}
       }
       // A meta refresh is a reload with a timer we cannot clear

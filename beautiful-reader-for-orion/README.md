@@ -1,4 +1,36 @@
-# Beautiful Reader for Orion — v1.18.7
+# Beautiful Reader for Orion — v1.18.8
+
+## What's new in v1.18.8
+
+**The menu gets a second door.** Orion intermittently
+swallows extension toolbar popups — tap the icon and no
+menu appears until the browser is restarted. The popup
+webview is Orion's surface and no extension can force it
+open, so the menu now also lives somewhere the extension
+fully controls:
+
+- **Long-press the pill** and the same popup menu opens
+  in an in-page panel — the actual `popup.html`, embedded
+  in an iframe (it's web-accessible for exactly this), so
+  it's the full menu: This Site, All Sites, the Always
+  Use Reader list, defaults, Saved, History. Tap outside
+  or ✕ to close. (Long-press used to open Saved Articles
+  directly; Saved is a tab in the panel now.)
+- **If the embed doesn't come up** — the framed popup
+  announces itself when it's alive; if there's no word
+  within ~2.5 seconds, the panel swaps in native controls
+  for the essentials (Open/Close Reader, this site's
+  Always-use toggle, All Sites) instead of sitting blank.
+- **The popup itself is hang-proofed.** A wedged
+  extension context can leave storage calls pending
+  forever, which made the native menu open blank or not
+  populate. Storage and tab lookups in the popup now cap
+  their wait and fall back to defaults, so the menu
+  always renders.
+- The page purge now exempts anything inside any
+  Beautiful Reader UI surface (it already spared the
+  reader's embeds), so a hostile page can't strip the
+  panel's iframe either.
 
 ## What's new in v1.18.7
 

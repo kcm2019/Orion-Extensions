@@ -1,4 +1,33 @@
-# Beautiful Reader for Orion — v1.18.6
+# Beautiful Reader for Orion — v1.18.7
+
+## What's new in v1.18.7
+
+**Loose-text articles are detected and read.** A
+TechPowerUp story got no pill, and forcing the reader
+open showed the title with no body. The live page
+explained why: its body is ~1,900 characters in three
+paragraphs with **zero `<p>` tags** — bare text nodes
+inside the `<article>` element, paragraphs separated
+by `<br><br>`, inline links interspersed. Detection
+counted only `<p>` text (so the page scored zero) and
+the walker only visited element children (so the text
+was never harvested). Both now understand loose text:
+
+- A container's direct inline content is grouped into
+  runs — a run ends at a block-level child or a double
+  `<br>` — and runs of 40+ characters count as
+  paragraphs in candidate stats and are harvested as
+  paragraph blocks, inline links and formatting kept.
+  Short runs stay furniture (dates, bylines, "Sources:"
+  lines).
+- Skipped subtrees (comments, related, share) stay out,
+  and the skip matcher now catches plurals too —
+  `class="comments"` previously slipped past the
+  `comment` pattern and could leak comment text into
+  the body.
+
+A link-dense page of loose headlines still gets no
+pill (verified by test), so index pages are unaffected.
 
 ## What's new in v1.18.6
 

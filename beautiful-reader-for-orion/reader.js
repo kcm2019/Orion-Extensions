@@ -303,7 +303,7 @@
 
   // ---------- extraction ----------
   var SKIP_TAGS = { SCRIPT: 1, STYLE: 1, NOSCRIPT: 1, NAV: 1, HEADER: 1, FOOTER: 1, ASIDE: 1, FORM: 1, BUTTON: 1, SELECT: 1, TEXTAREA: 1, INPUT: 1, SVG: 1, AUDIO: 1, CANVAS: 1 };
-  var SKIP_RE = /(^|[-_\s])(ad|ads|advert|sidebar|comment|share|social|related|promo|newsletter|cookie|popup|modal|menu|nav|breadcrumb|pagination|recommend|subscribe|signup|sign-up|toolbar|widget|consent|onetrust|trustarc|sourcepoint|gdpr|ccpa)([-_\s]|$)/i;
+  var SKIP_RE = /(^|[-_\s])(ad|ads|advert|sidebar|comment|share|social|related|promo|newsletter|cookie|popup|modal|menu|nav|breadcrumb|pagination|recommend|subscribe|signup|sign-up|toolbar|widget|consent|onetrust|trustarc|sourcepoint|gdpr|ccpa)s?([-_\s]|$)/i;
 
   function meta(doc, names) {
     for (var i = 0; i < names.length; i++) {
@@ -464,6 +464,47 @@
     };
   }
 
+  var INLINE_TAGS = { a: 1, abbr: 1, b: 1, bdi: 1, bdo: 1, cite: 1, code: 1, data: 1, dfn: 1, em: 1, font: 1, i: 1, ins: 1, del: 1, kbd: 1, mark: 1, nobr: 1, q: 1, s: 1, samp: 1, small: 1, span: 1, strong: 1, sub: 1, sup: 1, time: 1, tt: 1, u: 1, var: 1, wbr: 1 };
+
+  // Loose text: some CMSs (TechPowerUp is one) serve the article
+  // body as bare text nodes and inline elements directly inside
+  // a container — paragraphs separated by <br><br>, no <p> tags
+  // anywhere. Group a container's DIRECT inline content into
+  // runs: a run ends at a block-level child or a double <br>.
+  // Returns the runs whose text is at least minLen characters
+  // (short runs are furniture: dates, bylines, "Sources:" lines).
+  function looseRuns(node, minLen) {
+    var runs = [], cur = [], brRun = 0;
+    function flush() {
+      if (cur.length) {
+        var t = '';
+        for (var i = 0; i < cur.length; i++) t += (cur[i].nodeType === 3 ? cur[i].nodeValue : cur[i].textContent) + ' ';
+        t = cleanText(t);
+        if (t.length >= minLen) runs.push({ nodes: cur, text: t });
+      }
+      cur = []; brRun = 0;
+    }
+    var kids = node.childNodes;
+    for (var i = 0; i < kids.length; i++) {
+      var k = kids[i];
+      if (k.nodeType === 3) {
+        if (/\S/.test(k.nodeValue)) { cur.push(k); brRun = 0; }
+        continue;
+      }
+      if (k.nodeType !== 1) continue;
+      var tag = k.tagName.toLowerCase();
+      if (tag === 'br') {
+        brRun++;
+        if (brRun >= 2) flush(); else cur.push(k);
+        continue;
+      }
+      if (INLINE_TAGS[tag]) { cur.push(k); brRun = 0; continue; }
+      flush();
+    }
+    flush();
+    return runs;
+  }
+
   function candidateStats(node) {
     var ps = node.querySelectorAll('p');
     var textLength = 0, boilerChars = 0;
@@ -472,12 +513,30 @@
       textLength += pt.length;
       if (C.isLegalBoilerplate(pt)) boilerChars += pt.length;
     }
+    // Loose text counts too: a body with no <p> tags at all
+    // still has a text length and a paragraph count.
+    var containers = [node];
+    var all = node.querySelectorAll('*');
+    for (var ci = 0; ci < all.length; ci++) {
+      var ct = all[ci].tagName.toLowerCase();
+      if (ct === 'p' || INLINE_TAGS[ct]) continue;
+      containers.push(all[ci]);
+    }
+    var looseParas = 0;
+    for (var cj = 0; cj < containers.length; cj++) {
+      var runs = looseRuns(containers[cj], 40);
+      for (var rj = 0; rj < runs.length; rj++) {
+        textLength += runs[rj].text.length;
+        looseParas++;
+        if (C.isLegalBoilerplate(runs[rj].text)) boilerChars += runs[rj].text.length;
+      }
+    }
     var links = node.querySelectorAll('a');
     var linkText = 0;
     for (var j = 0; j < links.length; j++) linkText += cleanText(links[j].textContent).length;
     var total = cleanText(node.textContent).length || 1;
     return {
-      textLength: textLength, paragraphCount: ps.length,
+      textLength: textLength, paragraphCount: ps.length + looseParas,
       linkDensity: Math.min(1, linkText / total),
       boilerRatio: textLength ? boilerChars / textLength : 0
     };
@@ -529,10 +588,37 @@
   }
 
   function walkBlocks(node, blocks, seen, baseUrl, titleText, rescue) {
-    var children = node.children;
+    var children = node.childNodes;
+    // Loose-text accumulation (see looseRuns): direct text and
+    // inline children of a container are buffered and flushed
+    // as a paragraph at each block boundary or double <br>.
+    var loose = [], brRun = 0;
+    function flushLoose() {
+      if (!loose.length) return;
+      var holder = document.createElement('div');
+      for (var fi = 0; fi < loose.length; fi++) holder.appendChild(loose[fi].cloneNode(true));
+      loose = []; brRun = 0;
+      var t = cleanText(textOfExcludingSkips(holder));
+      if (t.length < 40 || t === titleText || C.isUiJunk(t)) return;
+      var pb = { type: 'paragraph', text: t };
+      var ph = inlineHtml(holder, baseUrl);
+      if (ph.hasLink || ph.hasRich) pb.html = ph.html;
+      pushTextBlock(blocks, seen, pb);
+    }
     for (var i = 0; i < children.length; i++) {
       var child = children[i];
-      if (shouldSkip(child) && !(rescue && articleLikeContainer(child))) continue;
+      if (child.nodeType === 3) {
+        if (/\S/.test(child.nodeValue)) { loose.push(child); brRun = 0; }
+        continue;
+      }
+      if (child.nodeType !== 1) continue;
+      var ctag = child.tagName.toLowerCase();
+      if (ctag === 'br') {
+        brRun++;
+        if (brRun >= 2) flushLoose(); else loose.push(child);
+        continue;
+      }
+      if (shouldSkip(child) && !(rescue && articleLikeContainer(child))) { flushLoose(); continue; }
       // A caption element trailing its image under the same
       // wrapper (not a <figcaption>): attach it to the image
       // block it follows instead of emitting it as stray text.
@@ -540,10 +626,20 @@
         var lastB = blocks[blocks.length - 1];
         if (lastB.type === 'image' && !lastB.caption) {
           var capT = cleanText(textOfExcludingSkips(child));
-          if (capT && capT.length <= 400 && !C.looksLikeFilename(capT)) { lastB.caption = capT; continue; }
+          if (capT && capT.length <= 400 && !C.looksLikeFilename(capT)) { lastB.caption = capT; flushLoose(); continue; }
         }
       }
-      var tag = child.tagName.toLowerCase();
+      if (INLINE_TAGS[ctag]) {
+        // An inline wrapper around media is structure, not
+        // text: walk it so the image inside still lands.
+        if (child.querySelector && child.querySelector('img, picture, video, iframe')) {
+          flushLoose();
+          walkBlocks(child, blocks, seen, baseUrl, titleText, rescue);
+        } else { loose.push(child); brRun = 0; }
+        continue;
+      }
+      flushLoose();
+      var tag = ctag;
       if (/^h[1-6]$/.test(tag)) {
         var ht = cleanText(textOfExcludingSkips(child));
         if (ht && ht !== titleText) {
@@ -650,6 +746,7 @@
         walkBlocks(child, blocks, seen, baseUrl, titleText, rescue);
       }
     }
+    flushLoose();
   }
 
   function pushTextBlock(blocks, seen, block) {

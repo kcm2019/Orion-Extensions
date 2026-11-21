@@ -16,7 +16,7 @@
   var K = {
     settings: 'br.settings.v1', perSite: 'br.perSite.v1', autoSites: 'br.autoSites.v1',
     progress: 'br.progress.v1', highlights: 'br.highlights.v1', library: 'br.library.v1',
-    history: 'br.history.v1'
+    history: 'br.history.v1', translations: 'br.translations.v1'
   };
 
   // ---------- storage: browser.storage -> chrome.storage -> localStorage ----------
@@ -65,7 +65,9 @@
     current: null, headings: [], open: false, dismissed: false, autoOpened: false,
     aaScope: 'global', stitching: false, saveTimer: null, selBar: null,
     embedLoadMs: 9000, // social iframe load watchdog (v1.18.6)
-    menuReadyMs: 2500 // in-page menu panel handshake (v1.18.8)
+    menuReadyMs: 2500, // in-page menu panel handshake (v1.18.8)
+    translations: {}, translated: null, showingTranslation: false, // v1.19.0 translation
+    translatedSource: '', trSameLang: '', trAutoTried: '', trBusy: false
   };
 
   function perSite() { return S.perSite[S.host] || null; }
@@ -1306,7 +1308,7 @@
 
   function renderBlocksInto(container, blocks, headingRegistry, byline) {
     var textOnly = !!eff().textOnly;
-    blocks.forEach(function (b) {
+    blocks.forEach(function (b, bi) {
       if (textOnly && (b.type === 'image' || b.type === 'video' || b.type === 'embed' || b.type === 'social')) return;
       var n = null;
       if (b.type === 'heading') {
@@ -1401,7 +1403,7 @@
       } else if (b.type === 'pagebreak') {
         n = el('div', 'br-pagebreak', 'Page ' + (b.page || ''));
       } else if (b.type === 'hr') { n = el('hr'); }
-      if (n) container.appendChild(n);
+      if (n) { n.setAttribute('data-bi', bi); container.appendChild(n); }
     });
   }
 
@@ -1458,8 +1460,10 @@
     r.scrollTop = frac * Math.max(0, max2);
   }
 
+  function viewA() { return (S.showingTranslation && S.translated) ? S.translated : S.current; }
+
   function renderCurrent() {
-    var a = S.current;
+    var a = viewA();
     S.content.innerHTML = '';
     S.headings = [];
     var head = el('div'); head.className = 'br-head';
@@ -1572,6 +1576,7 @@
     var pageFrac = pageScrollFraction();
     S.current = S.detected;
     S.current.fromLibrary = false;
+    S.translated = null; S.showingTranslation = false; S.translatedSource = '';
     buildReader();
     renderCurrent();
     showReaderShell();
@@ -1590,6 +1595,7 @@
     if (pageHostile()) killPage();
     // Only now — kill already run — may embeds start loading.
     activateEmbeds();
+    maybeAutoTranslate();
   }
 
   function openSavedArticle(item) {
@@ -1614,12 +1620,14 @@
       heroVideo: item.heroVideo || null, favicon: item.favicon || '',
       blocks: blocksCopy, wordCount: item.wordCount || 0, fromLibrary: true
     };
+    S.translated = null; S.showingTranslation = false; S.translatedSource = '';
     closeSheet();
     renderCurrent();
     showReaderShell();
     if (eff().autoScroll) scrollStart();
     restoreProgressAndHighlights();
     activateEmbeds();
+    maybeAutoTranslate();
   }
 
   // ---------- late-loading images ----------
@@ -2800,6 +2808,205 @@
     refreshMenuSelections();
   }
 
+  // ---------- translation (v1.19.0) ----------
+  // Google engine — the unofficial gtx endpoint Kurt picked: no
+  // key, no quota signup, source language auto-detected and
+  // returned with the result. Article text goes to Google only
+  // when a translation actually runs. Results are cached per
+  // article + target (br.translations.v1, cap 10) so re-reads
+  // and Saved articles (C) cost nothing. Auto-translate on open
+  // is (A); the cache is (B).
+  var TR_LANGS = [
+    { c: 'en', l: 'English' }, { c: 'es', l: 'Spanish' }, { c: 'fr', l: 'French' },
+    { c: 'de', l: 'German' }, { c: 'it', l: 'Italian' }, { c: 'pt', l: 'Portuguese' },
+    { c: 'nl', l: 'Dutch' }, { c: 'pl', l: 'Polish' }, { c: 'ru', l: 'Russian' },
+    { c: 'uk', l: 'Ukrainian' }, { c: 'tr', l: 'Turkish' }, { c: 'sv', l: 'Swedish' },
+    { c: 'ar', l: 'Arabic' }, { c: 'hi', l: 'Hindi' }, { c: 'ja', l: 'Japanese' },
+    { c: 'ko', l: 'Korean' }, { c: 'zh-CN', l: 'Chinese (Simplified)' }
+  ];
+  function trLangName(code) {
+    for (var i = 0; i < TR_LANGS.length; i++) if (TR_LANGS[i].c === code) return TR_LANGS[i].l;
+    return code || '';
+  }
+  function chunkText(text, max) {
+    var chunks = [], rest = String(text || '');
+    max = max || 1200;
+    while (rest.length > max) {
+      var slice = rest.slice(0, max), cut = -1;
+      var m = slice.match(/[\s\S]*[.!?…]["'”’)]?\s/);
+      if (m) cut = m[0].length;
+      if (cut < max * 0.35) { var sp = slice.lastIndexOf(' '); cut = sp > max * 0.35 ? sp + 1 : max; }
+      chunks.push(rest.slice(0, cut));
+      rest = rest.slice(cut);
+    }
+    if (rest) chunks.push(rest);
+    return chunks;
+  }
+  function gtxTranslate(text, target) {
+    var chunks = chunkText(text, 1200), out = [], source = '', chain = Promise.resolve();
+    chunks.forEach(function (ch) {
+      chain = chain.then(function () {
+        var url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=' +
+          encodeURIComponent(target) + '&dt=t&q=' + encodeURIComponent(ch);
+        return fetch(url).then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        }).then(function (d) {
+          if (d && d[2]) source = String(d[2]);
+          var t = '';
+          if (d && d[0]) for (var i = 0; i < d[0].length; i++) if (d[0][i] && d[0][i][0]) t += d[0][i][0];
+          if (!t) throw new Error('empty translation');
+          out.push(t);
+        });
+      });
+    });
+    return chain.then(function () { return { text: out.join(''), source: source }; });
+  }
+  // The translatable units of an article, in a stable order —
+  // the cache stores results aligned with this list.
+  function translationJobs(a) {
+    var jobs = [];
+    if (a.title && a.title.trim()) jobs.push({ kind: 'title', text: a.title });
+    if (a.subtitle && a.subtitle.trim()) jobs.push({ kind: 'subtitle', text: a.subtitle });
+    (a.blocks || []).forEach(function (b, bi) {
+      if (b.type === 'paragraph' || b.type === 'heading' || b.type === 'quote' || b.type === 'tablecaption') {
+        if (b.text && b.text.trim().length > 1) jobs.push({ kind: 'block', bi: bi, text: b.text });
+      } else if (b.type === 'list') {
+        (b.items || []).forEach(function (it, ii) { if (it && String(it).trim()) jobs.push({ kind: 'item', bi: bi, ii: ii, text: String(it) }); });
+      } else if (b.type === 'table') {
+        (b.rows || []).forEach(function (row, ri) { (row || []).forEach(function (cell, ci) { if (cell && String(cell).trim()) jobs.push({ kind: 'cell', bi: bi, ri: ri, ci: ci, text: String(cell) }); }); });
+      } else if (b.type === 'image') {
+        if (b.caption && b.caption.trim()) jobs.push({ kind: 'caption', bi: bi, text: b.caption });
+      } else if (b.type === 'social') {
+        if (!b.embedUrl && b.text && b.text.trim()) jobs.push({ kind: 'block', bi: bi, text: b.text });
+      }
+    });
+    return jobs;
+  }
+  function applyJobToArticle(t, job, text) {
+    if (job.kind === 'title') t.title = text;
+    else if (job.kind === 'subtitle') t.subtitle = text;
+    else if (job.kind === 'block') { t.blocks[job.bi].text = text; delete t.blocks[job.bi].html; }
+    else if (job.kind === 'item') t.blocks[job.bi].items[job.ii] = text;
+    else if (job.kind === 'cell') t.blocks[job.bi].rows[job.ri][job.ci] = text;
+    else if (job.kind === 'caption') t.blocks[job.bi].caption = text;
+  }
+  function buildTranslatedClone(a, jobs, results) {
+    var t = JSON.parse(JSON.stringify(a));
+    jobs.forEach(function (job, ji) { if (results[ji] != null) applyJobToArticle(t, job, results[ji]); });
+    return t;
+  }
+  // Progressive feedback: swap one unit's text in the live DOM.
+  function applyJobToDom(job, text) {
+    try {
+      if (!S.reader) return;
+      if (job.kind === 'title') { var h = S.reader.querySelector('.br-title'); if (h) h.textContent = text; return; }
+      if (job.kind === 'subtitle') { var s = S.reader.querySelector('.br-subtitle'); if (s) s.textContent = text; return; }
+      if (!S.articleBody) return;
+      var n = S.articleBody.querySelector('[data-bi="' + job.bi + '"]');
+      if (!n) return;
+      if (job.kind === 'block') n.textContent = text;
+      else if (job.kind === 'item') { var li = n.children[job.ii]; if (li) li.textContent = text; }
+      else if (job.kind === 'cell') { var trs = n.querySelectorAll('tr'); var tr = trs[job.ri]; var td = tr && tr.children[job.ci]; if (td) td.textContent = text; }
+      else if (job.kind === 'caption') { var cap = n.querySelector('figcaption'); if (cap) cap.textContent = text; }
+    } catch (e) {}
+  }
+  function trCacheKey(url, target) { return url + '|' + target; }
+  function getCachedTranslation(url, target) {
+    var e = S.translations[trCacheKey(url, target)];
+    return (e && Array.isArray(e.results)) ? e : null;
+  }
+  function putCachedTranslation(url, target, source, results) {
+    S.translations[trCacheKey(url, target)] = { source: source, results: results, savedAt: Date.now() };
+    var keys = Object.keys(S.translations);
+    if (keys.length > 10) {
+      keys.sort(function (x, y) { return (S.translations[x].savedAt || 0) - (S.translations[y].savedAt || 0); });
+      while (keys.length > 10) delete S.translations[keys.shift()];
+    }
+    storageSet(K.translations, S.translations);
+  }
+  function applyTranslationEntry(a, entry, jobs) {
+    S.translated = buildTranslatedClone(a, jobs, entry.results);
+    S.translatedSource = entry.source || '';
+    S.showingTranslation = true;
+    rerenderKeepScroll();
+  }
+  var trRunSeq = 0;
+  // Resolves 'ok' | 'cached' | 'same' | 'aborted'; rejects on
+  // network/API failure (after restoring the original DOM).
+  function translateCurrent(opts) {
+    opts = opts || {};
+    var a = S.current;
+    if (!a) return Promise.resolve('aborted');
+    var target = (S.settings && S.settings.translateTarget) || 'en';
+    var jobs = translationJobs(a);
+    if (!jobs.length) return Promise.resolve('aborted');
+    var cached = getCachedTranslation(a.url, target);
+    if (cached && cached.results.length === jobs.length) { applyTranslationEntry(a, cached, jobs); return Promise.resolve('cached'); }
+    var run = ++trRunSeq;
+    S.trBusy = true;
+    var results = new Array(jobs.length), source = '', done = 0, sameLangChecks = 0;
+    var chain = Promise.resolve();
+    jobs.forEach(function (job, ji) {
+      chain = chain.then(function () {
+        if (run !== trRunSeq || !S.open) throw { brAbort: true };
+        return gtxTranslate(job.text, target).then(function (r) {
+          if (r.source) source = r.source;
+          if (source && source === target) {
+            sameLangChecks++;
+            if (sameLangChecks >= 2) throw { brSame: true };
+          }
+          results[ji] = r.text;
+          done++;
+          if (opts.onProgress) opts.onProgress(done, jobs.length);
+          applyJobToDom(job, r.text);
+        });
+      });
+    });
+    return chain.then(function () {
+      S.trBusy = false;
+      putCachedTranslation(a.url, target, source, results);
+      applyTranslationEntry(a, { source: source, results: results }, jobs);
+      return 'ok';
+    }).catch(function (e) {
+      S.trBusy = false;
+      if (e && e.brSame) {
+        S.trSameLang = trCacheKey(a.url, target);
+        if (S.open && S.current === a) rerenderKeepScroll();
+        return 'same';
+      }
+      if (e && e.brAbort) {
+        if (S.open && S.current === a && !S.showingTranslation) rerenderKeepScroll();
+        return 'aborted';
+      }
+      if (S.open && S.current === a && !S.showingTranslation) rerenderKeepScroll();
+      throw e;
+    });
+  }
+  function showOriginal() {
+    if (!S.showingTranslation) return;
+    S.showingTranslation = false;
+    rerenderKeepScroll();
+  }
+  function cancelTranslation() {
+    trRunSeq++;
+    S.trBusy = false;
+    if (S.open && !S.showingTranslation) rerenderKeepScroll();
+  }
+  function maybeAutoTranslate() {
+    try {
+      if (!S.settings || !S.settings.translateAuto || !S.current || !S.open) return;
+      if (S.showingTranslation) return;
+      var target = S.settings.translateTarget || 'en';
+      var key = trCacheKey(S.current.url, target);
+      if (S.trSameLang === key || S.trAutoTried === key) return;
+      S.trAutoTried = key;
+      translateCurrent({ auto: true }).then(function (status) {
+        if (status === 'ok' || status === 'cached') showToast('Translated from ' + trLangName(S.translatedSource));
+      }).catch(function () {});
+    } catch (e) {}
+  }
+
   function openAaSheet() {
     openSheet(function (sheet) {
       var e = eff();
@@ -2834,7 +3041,7 @@
       menuRow(sheet, { icon: '⎘', label: 'Copy Extraction Report', onClick: function () { closeSheet(); copyExtractionReport(); } });
 
       // Collapsible setting categories — tap a header to expand/collapse.
-      if (!S.openSections) S.openSections = { site: true, appearance: true, text: false, layout: false, listen: false };
+      if (!S.openSections) S.openSections = { site: true, appearance: true, text: false, layout: false, listen: false, translate: false };
       function section(id, label) {
         var hd = el('button', 'br-sec-head');
         hd.appendChild(el('span', '', label));
@@ -2865,6 +3072,7 @@
       var secText = section('text', 'Text');
       var secLayout = section('layout', 'Layout');
       var secListen = section('listen', 'Listen & Scroll');
+      var secTranslate = section('translate', 'Translate');
       switchRow(secListen, 'Read Aloud', flowState().ttsOn, function (on) {
         if (on) { closeSheet(); ttsStart(); } else ttsStop();
       });
@@ -2882,6 +3090,48 @@
         menuRow(secListen, {
           icon: '↓', label: 'Scroll Speed · ' + o.l, dataKey: 'scrollSpeed:' + o.v,
           onClick: function () { writeGlobal({ scrollSpeed: o.v }); }
+        });
+      });
+
+      // Translate (v1.19.0) — Google engine. The action row
+      // translates (or stops a running translation, or flips
+      // back to the original); below it the auto-translate
+      // switch and the target-language list.
+      var trTarget = (S.settings && S.settings.translateTarget) || 'en';
+      menuRow(secTranslate, {
+        icon: '🌐',
+        label: S.trBusy ? 'Translating… — tap to stop' : (S.showingTranslation ? 'Show Original' : 'Translate to ' + trLangName(trTarget)),
+        onClick: function () {
+          if (S.trBusy) { cancelTranslation(); showToast('Translation stopped'); openAaSheet(); return; }
+          if (S.showingTranslation) { showOriginal(); openAaSheet(); return; }
+          closeSheet();
+          showToast('Translating…');
+          translateCurrent({
+            onProgress: function (d, total) {
+              if (total > 6 && d < total && d % Math.ceil(total / 4) === 0) showToast('Translating… ' + Math.round((d / total) * 100) + '%');
+            }
+          }).then(function (status) {
+            if (status === 'same') showToast('Already in ' + trLangName(trTarget));
+            else if (status === 'ok' || status === 'cached') showToast('Translated from ' + trLangName(S.translatedSource));
+            else if (status === 'aborted') showToast('Translation stopped');
+          }).catch(function () { showToast('Translation failed — check connection'); });
+        }
+      });
+      if (S.showingTranslation && S.translatedSource) {
+        secTranslate.appendChild(el('p', 'br-note', 'Translated from ' + trLangName(S.translatedSource) + ' · article text was sent to Google Translate'));
+      }
+      switchRow(secTranslate, 'Auto-Translate', !!eff().translateAuto, function (on) { writeGlobal({ translateAuto: on }); });
+      secTranslate.appendChild(el('h4', '', 'Language'));
+      TR_LANGS.forEach(function (o) {
+        menuRow(secTranslate, {
+          label: o.l, selected: trTarget === o.c, dataKey: 'tlang:' + o.c,
+          onClick: function () {
+            writeGlobal({ translateTarget: o.c });
+            if (S.showingTranslation) { S.showingTranslation = false; rerenderKeepScroll(); }
+            S.translated = null; S.translatedSource = '';
+            S.trSameLang = ''; S.trAutoTried = '';
+            openAaSheet();
+          }
         });
       });
 
@@ -3882,11 +4132,12 @@
     Promise.all([
       storageGet(K.settings, null), storageGet(K.perSite, {}), storageGet(K.autoSites, []),
       storageGet(K.progress, {}), storageGet(K.highlights, {}), storageGet(K.library, []),
-      storageGet(K.history, null)
+      storageGet(K.history, null), storageGet(K.translations, {})
     ]).then(function (vals) {
       S.settings = vals[0] || JSON.parse(JSON.stringify(C.DEFAULT_SETTINGS));
       S.perSite = vals[1] || {}; S.autoSites = vals[2] || [];
       S.progress = vals[3] || {}; S.highlights = vals[4] || {}; S.library = vals[5] || [];
+      S.translations = vals[7] || {};
       if (Array.isArray(vals[6])) S.history = vals[6];
       else {
         // First run: seed history from saved reading positions.

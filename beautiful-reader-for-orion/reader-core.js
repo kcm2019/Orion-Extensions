@@ -46,6 +46,8 @@
     ttsRate: 1,
     scrollSpeed: 40, // px per second for auto-scroll
     wallBreaker: true, // v1.10.0: page-level anti-adblock wall breaking (wallbreaker.js)
+    translateTarget: 'en', // v1.19.0: article translation target language (Google engine)
+    translateAuto: false, // v1.19.0: auto-translate on open when the article is in another language
     autoAll: false, // v1.18.5: auto-open the reader on ANY site with a detected article (popup toggle)
     pillPos: null // {side:'left'|'right', top:number}
   };

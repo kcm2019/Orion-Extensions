@@ -1,4 +1,38 @@
-# Beautiful Reader for Orion — v1.18.8
+# Beautiful Reader for Orion — v1.19.0
+
+## What's new in v1.19.0
+
+**Article translation** (Google engine — no key, no
+signup), in a new **Translate** section of the gear menu:
+
+- **Translate to …** — title, subtitle, paragraphs,
+  headings, quotes, list items, table cells and image
+  captions are sent to Google's translate endpoint in
+  sentence-sized chunks and swapped in progressively as
+  each piece lands; the source language is auto-detected.
+  Blocks keep their place; links inside a translated
+  paragraph are dropped (the original is one tap away).
+- **Show Original** flips back instantly; the translation
+  stays in memory, so flipping is free both ways.
+- **17 target languages** — English, Spanish, French,
+  German, Italian, Portuguese, Dutch, Polish, Russian,
+  Ukrainian, Turkish, Swedish, Arabic, Hindi, Japanese,
+  Korean, Chinese (Simplified).
+- **(A) Auto-Translate** — when on, opening an article in
+  another language translates it automatically; a probe
+  of the first chunks detects "already in your language"
+  and stops (and remembers, per article + language).
+- **(B) Cache** — translations are stored per article +
+  language (`br.translations.v1`, last 10), so re-reads
+  never touch the network again.
+- **(C) Saved articles** — library items translate (and
+  auto-translate) exactly like live ones.
+
+Nothing is sent anywhere until a translation runs.
+Honest limits: the engine is Google's unofficial endpoint
+— if it ever rate-limits or changes, translation fails
+with a toast rather than silently; the table of contents
+keeps the original headings until the next re-render.
 
 ## What's new in v1.18.8
 

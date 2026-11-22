@@ -80,6 +80,17 @@
     <label class="switch"><input type="checkbox" id="all-toggle"><span class="tr"></span></label>
   </div>
   <div class="note">When this is on, Reader opens by itself on any site where an article is found — no need to add sites to the list below.</div>
+  <div class="row" id="blocked-row" hidden>
+    <div class="grow"><div class="host">Reader Blocked Here</div></div>
+    <button class="plain" id="unblock-btn">Unblock</button>
+  </div>
+  <div class="note" id="blocked-note" hidden>This site is on the global block list, which overrides Reader Mode and Always Use Reader — the reader will not open here.</div>
+</section>
+
+<section id="sec-blocked" hidden>
+  <h2>Blocked Sites</h2>
+  <div class="note">The reader never opens on these sites or their subdomains. To block a site, open the reader there and use Aa → This Site → Never Open Reader on This Site.</div>
+  <div id="blocked-list"></div>
 </section>
 
 <section id="sec-list">

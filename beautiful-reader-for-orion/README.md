@@ -1,4 +1,67 @@
-# Beautiful Reader for Orion — v1.20.0
+# Beautiful Reader for Orion — v1.20.1
+
+## What's new in v1.20.1
+
+Four follow-ups to the Wikipedia release, all Kurt's
+asks from Nov 22:
+
+Contents box. Every article with 3+ headings gets an
+in-article Contents card below the opening paragraph
+and the infobox (the "summary info box") when one
+sits up top — always collapsed by default, opening
+only when its header is tapped. Entries mirror the
+heading registry; tapping one expands any folded
+ancestor sections and jumps, like the Contents sheet.
+
+Link taps actually open links. Kurt: tapping any
+link in the reader did nothing (long-press only) —
+the v1.18.6 window.open answer was not enough on
+Orion. Taps now go through openLink(): the
+background page opens a real tab via tabs.create
+(br-background.js answers br:openTab), window.open
+is the second door, same-tab navigation the last.
+Clean pointer taps on links are also handled on
+pointerup, like image taps since v1.15.1, with a
+900 ms stamp keeping the two paths to one tab.
+
+Footnote links. Citation chips now also carry the
+note as sanitized HTML (data-notehtml, captured by
+re-running inlineHtml on the target with fragment
+backlinks unwrapped and a recursion guard); the
+footnote popup renders it, so a reference's own
+links — DOIs, source links — are tappable and go
+through openLink() too.
+
+Wikipedia media, hardened. Figures wrap Wikipedia's
+audio/video files exactly like images, and figure
+media used to vanish outright; now media wins the
+figure, with its caption. Galleries include video
+and audio files as players with posters; infobox
+cells holding media (an anthem, a spoken sample)
+render a playable row; a video whose format WebKit
+cannot decode (ogv-only files) falls back to its
+poster with a watch-on-the-original-page note.
+
+Global blocklist. br.blocklist.v1: sites where the
+reader never activates — no pill, no auto-open, and
+openReader/forceOpenReader refuse. The list
+OVERRIDES the popup's force-enable (Reader Mode)
+toggle, per spec. Seeded once with youtube.com and
+wsj.com; entries cover subdomains (m.youtube.com).
+Block a site from inside the reader (Aa → This
+Site → Never Open Reader on This Site — closes the
+reader, drops the pill, removes the site from
+Always Open); manage it in the extension menu,
+which shows a Blocked Sites section, disables
+Reader Mode on blocked sites, and unblocks.
+(Consequence: the WSJ extraction suite now empties
+the list up front to keep testing extraction.)
+
+Verified: new suites e2e-v1201.js (13 checks),
+e2e-v1202.js (17 checks), e2e-blocklist.js (17
+checks, content + popup); full battery 39 suites
+green.
+
 
 ## What's new in v1.20.0
 

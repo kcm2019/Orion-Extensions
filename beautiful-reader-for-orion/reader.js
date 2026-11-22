@@ -16,7 +16,7 @@
   var K = {
     settings: 'br.settings.v1', perSite: 'br.perSite.v1', autoSites: 'br.autoSites.v1',
     progress: 'br.progress.v1', highlights: 'br.highlights.v1', library: 'br.library.v1',
-    history: 'br.history.v1', translations: 'br.translations.v1'
+    history: 'br.history.v1', translations: 'br.translations.v1', blocklist: 'br.blocklist.v1'
   };
 
   // ---------- storage: browser.storage -> chrome.storage -> localStorage ----------
@@ -59,7 +59,7 @@
 
   // ---------- state ----------
   var S = {
-    settings: null, perSite: {}, autoSites: [], progress: {}, highlights: {}, library: [], history: [],
+    settings: null, perSite: {}, autoSites: [], blocklist: [], progress: {}, highlights: {}, library: [], history: [],
     host: C.hostOf(location.href), detected: null, pill: null, pillShrunk: false,
     reader: null, content: null, articleEl: null, bar: null, statusEl: null,
     current: null, headings: [], open: false, dismissed: false, autoOpened: false,
@@ -297,7 +297,7 @@
     '.br-ib-full:first-child{border-top:0}',
     '.br-gallery{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;padding:4px 2px 10px;margin:0 0 1.2em;-webkit-overflow-scrolling:touch}',
     '.br-gallery figure{flex:0 0 78%;scroll-snap-align:center;margin:0}',
-    '.br-gallery img{width:100%;border-radius:12px;display:block}',
+    '.br-gallery img,.br-gallery video{width:100%;border-radius:12px;display:block}',
     '.br-gallery figcaption{font-size:.8em;color:var(--br-secondary);line-height:1.4;padding-top:6px}',
     '.br-navbox{border:1px solid var(--br-border,rgba(127,127,127,.25));border-radius:14px;margin:1.6em 0;background:var(--br-card,rgba(127,127,127,.06));font-family:-apple-system,system-ui,sans-serif;overflow:hidden}',
     '.br-navbox-head{width:100%;appearance:none;border:0;background:rgba(127,127,127,.1);color:var(--br-text);font:600 .92em -apple-system,system-ui,sans-serif;text-align:left;padding:12px 14px;cursor:pointer;display:flex;gap:9px;align-items:center}',
@@ -317,6 +317,12 @@
     '.br-tablewrap th,.br-tablewrap td{padding:8px 11px;border-bottom:1px solid rgba(127,127,127,.14);vertical-align:top}',
     '.br-tablewrap tr:last-child td{border-bottom:0}',
     '.br-body audio{width:100%;margin:.4em 0 1em}',
+    '.br-tocbox{border:1px solid var(--br-border,rgba(127,127,127,.25));border-radius:14px;margin:0 0 1.4em;background:var(--br-card,rgba(127,127,127,.06));font-family:-apple-system,system-ui,sans-serif;overflow:hidden}',
+    '.br-tocbox-head{width:100%;appearance:none;border:0;background:rgba(127,127,127,.1);color:var(--br-text);font:600 .95em -apple-system,system-ui,sans-serif;text-align:left;padding:12px 14px;cursor:pointer;display:flex;gap:9px;align-items:center}',
+    '.br-tocbox-head .br-tocbox-chev{transition:transform .2s;color:var(--br-secondary);font-size:.85em}',
+    '.br-tocbox.br-open .br-tocbox-chev{transform:rotate(90deg)}',
+    '.br-tocbox-body{display:none;padding:6px 8px 10px}',
+    '.br-tocbox.br-open .br-tocbox-body{display:block}',
     '.br-asec-btn{appearance:none;border:0;background:rgba(127,127,127,.13);color:var(--br-secondary);width:27px;height:27px;border-radius:50%;font-size:14px;line-height:1;cursor:pointer;float:right;margin:2px 0 4px 10px;padding:0;transition:transform .22s}',
     '.br-asec.br-closed .br-asec-btn{transform:rotate(-90deg)}',
     '.br-asec-body{display:block}',
@@ -326,6 +332,7 @@
     '#br-fnpop.br-on{display:block;animation:brpop .18s ease}',
     '@keyframes brpop{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}',
     '#br-fnpop .br-fnlabel{display:block;font:700 10.5px -apple-system,system-ui,sans-serif;letter-spacing:.09em;text-transform:uppercase;color:#0A84FF;margin-bottom:5px}',
+    '#br-fnpop a{color:#5EB1FF;text-decoration:underline}',
     '.br-speaking{background:rgba(10,132,255,.13);border-radius:6px;box-shadow:0 0 0 4px rgba(10,132,255,.13)}',
     '#br-flowchip{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:6;display:none;align-items:center;gap:4px;',
     'background:rgba(30,30,32,.94);border-radius:999px;padding:6px 10px;box-shadow:0 10px 30px rgba(0,0,0,.35);font-family:-apple-system,system-ui,sans-serif}',
@@ -443,6 +450,7 @@
   // elements (absolute hrefs, new tab), everything else flattened to
   // text, skippable subtrees excluded. Only set on blocks that contain
   // at least one link — everything else stays plain text.
+  var fnHtmlDepth = 0;
   function inlineHtml(node, baseUrl) {
     var out = [], hasLink = false, hasRich = false;
     (function walk(n) {
@@ -474,7 +482,27 @@
                   // their "note" (v1.20.0 fix).
                   var noteTxt = cleanText(textOfExcludingSkips(tgt)).replace(/[↩↑]\s*/g, '').replace(/^\^\s*/, '').trim();
                   if (noteTxt.length >= 10) {
-                    out.push('<sup class="br-fnref" data-note="' + escapeHtmlAttr(noteTxt.slice(0, 600)) + '">' + escapeHtmlText(txt) + '</sup>');
+                    // The note as HTML too, when it carries
+                    // links (v1.20.1): the footnote popup
+                    // renders the HTML variant so a
+                    // reference's own links (DOIs, source
+                    // links) stay tappable. Fragment-only
+                    // anchors inside the note (citation
+                    // backlinks) are unwrapped to text, and
+                    // a depth guard keeps notes that cite
+                    // other notes from recursing.
+                    var noteHtml = '';
+                    if (fnHtmlDepth === 0) {
+                      try {
+                        fnHtmlDepth++;
+                        var nh = inlineHtml(tgt, baseUrl);
+                        fnHtmlDepth--;
+                        if (nh.html && nh.html.length <= 1400 && nh.html.indexOf('<a ') >= 0) {
+                          noteHtml = nh.html.replace(/<a href="#[^"]*"[^>]*>([\s\S]*?)<\/a>/g, '$1').replace(/^(\s|↑|\^)+/, '');
+                        }
+                      } catch (e) { fnHtmlDepth = 0; }
+                    }
+                    out.push('<sup class="br-fnref" data-note="' + escapeHtmlAttr(noteTxt.slice(0, 600)) + '"' + (noteHtml ? ' data-notehtml="' + escapeHtmlAttr(noteHtml) + '"' : '') + '>' + escapeHtmlText(txt) + '</sup>');
                     fnHandled = true;
                     hasRich = true;
                   }
@@ -709,6 +737,15 @@
       var th = trs[r].querySelector('th'), td = trs[r].querySelector('td');
       var thT = th ? cleanText(textOfExcludingSkips(th)) : '';
       if (td) {
+        // A media file in a cell (an anthem, a spoken
+        // sample): keep it playable as its own row
+        // (v1.20.1) instead of dropping it with the
+        // cell's near-empty text.
+        var tdMedia = td.querySelector('video, audio');
+        if (tdMedia) {
+          var tmB = mediaBlock(tdMedia, baseUrl);
+          if (tmB) { rows.push({ media: tmB.block, label: thT || '' }); continue; }
+        }
         var tdT = cleanText(textOfExcludingSkips(td));
         var tdImg = td.querySelector('img');
         if (th && thT && tdT) { if (thT !== title) rows.push({ label: thT, value: tdT }); }
@@ -843,8 +880,25 @@
           if (gBox) { var gCapEl = gBox.querySelector('.gallerytext, figcaption'); if (gCapEl) gCap = cleanText(textOfExcludingSkips(gCapEl)); }
           gImgs.push({ src: gSrc, caption: gCap });
         }
+        // Galleries hold media files too (v1.20.1): a
+        // video or audio file in a gallery box joins the
+        // row as a player with its poster, not an image.
+        var gMedia = child.querySelectorAll('video, audio');
+        for (var gm = 0; gm < gMedia.length; gm++) {
+          var gmB = mediaBlock(gMedia[gm], baseUrl);
+          if (!gmB || gSeen[gmB.block.src]) continue;
+          gSeen[gmB.block.src] = 1;
+          var gmBox = gMedia[gm].closest ? (gMedia[gm].closest('li') || gMedia[gm].closest('figure') || gMedia[gm].closest('.gallerybox')) : null;
+          var gmCap = '';
+          if (gmBox) { var gmCapEl = gmBox.querySelector('.gallerytext, figcaption'); if (gmCapEl) gmCap = cleanText(textOfExcludingSkips(gmCapEl)); }
+          gImgs.push({ src: gmB.block.poster || '', video: gmB.block.src, audio: !!gmB.block.audio, caption: gmCap });
+        }
         if (gImgs.length >= 2) { blocks.push({ type: 'gallery', images: gImgs }); continue; }
-        if (gImgs.length === 1) { pushImage(gAll[0], blocks, baseUrl, gImgs[0].caption); continue; }
+        if (gImgs.length === 1) {
+          if (gImgs[0].video) blocks.push({ type: 'video', src: gImgs[0].video, poster: gImgs[0].src, audio: gImgs[0].audio, caption: gImgs[0].caption });
+          else pushImage(gAll[0], blocks, baseUrl, gImgs[0].caption);
+          continue;
+        }
         continue;
       }
       if (child.classList && child.classList.contains('navbox')) {
@@ -904,9 +958,25 @@
       } else if (tag === 'img') {
         pushImage(child, blocks, baseUrl, '');
       } else if (tag === 'figure') {
-        var fimg = child.querySelector('img');
-        var cap = child.querySelector('figcaption');
-        if (fimg) pushImage(fimg, blocks, baseUrl, figureCaptionText(child, cap));
+        // Media first (v1.20.1): Wikipedia wraps its
+        // audio and video files in <figure> exactly like
+        // its images — a figure holding a player used to
+        // yield nothing at all (no <img>, no block), so
+        // the file silently vanished from the article.
+        var fMedia = child.querySelector('video, audio');
+        if (fMedia) {
+          var fmB = mediaBlock(fMedia, baseUrl);
+          if (fmB && !seen[fmB.key]) {
+            seen[fmB.key] = 1;
+            var fCapEl = child.querySelector('figcaption');
+            if (fCapEl) { var fmCap = cleanText(textOfExcludingSkips(fCapEl)); if (fmCap) fmB.block.caption = fmCap; }
+            blocks.push(fmB.block);
+          }
+        } else {
+          var fimg = child.querySelector('img');
+          var cap = child.querySelector('figcaption');
+          if (fimg) pushImage(fimg, blocks, baseUrl, figureCaptionText(child, cap));
+        }
       } else if (tag === 'blockquote') {
         var socb = socialFromEmbedEl(child, baseUrl);
         if (socb) {
@@ -1435,6 +1505,14 @@
     r.appendChild(prog); r.appendChild(bar); r.appendChild(art);
     r.appendChild(chip); r.appendChild(findBar); r.appendChild(fnPop);
     S.flowChip = chip; S.findBar = findBar; S.fnPop = fnPop; S.sectionEl = bar.querySelector('#br-section');
+    // Links inside a footnote note (a reference's DOI or
+    // source link) open like any other reader link.
+    fnPop.addEventListener('click', function (ev) {
+      var a = ev.target && ev.target.closest ? ev.target.closest('a[href]') : null;
+      if (!a) return;
+      var href = a.getAttribute('href') || '';
+      if (/^https?:\/\//i.test(href)) { ev.preventDefault(); openLink(href); }
+    });
     wireFindBar(findBar);
     // The menu MUST live inside the reader: the reader sits at the maximum
     // z-index, so a body-level panel renders underneath it and can never be
@@ -1500,9 +1578,7 @@
         if (/^https?:\/\//i.test(href)) {
           ev.preventDefault();
           hideFootnote();
-          var w = null;
-          try { w = window.open(href, '_blank'); } catch (e) {}
-          if (!w) { try { location.href = href; } catch (e) {} }
+          openLink(href);
           return;
         }
       }
@@ -1547,7 +1623,16 @@
         var fig = ev.target.closest('figure.br-hero');
         if (fig) img = fig.querySelector('img');
       }
-      if (img) openViewer(img);
+      if (img) { openViewer(img); return; }
+      // A clean tap on a link, same reasoning (v1.20.1):
+      // when the click a tap should produce gets swallowed,
+      // the tap still opens the link; when both paths fire,
+      // openLink's stamp keeps it to a single tab.
+      var la = ev.target && ev.target.closest ? ev.target.closest('a[href]') : null;
+      if (la && !la.classList.contains('br-fnref')) {
+        var lhref = la.getAttribute('href') || '';
+        if (/^https?:\/\//i.test(lhref)) openLink(lhref);
+      }
     }, { passive: true });
   }
 
@@ -1619,6 +1704,35 @@
       var host = secStack.length ? secStack[secStack.length - 1].body : container;
       host.appendChild(node);
     }
+    // In-article Contents box (v1.20.1): sits below the
+    // opening paragraph AND the summary info box (the
+    // infobox, when the article has one up top) — Kurt's
+    // placement. It ALWAYS starts collapsed; only a tap
+    // on its header opens it. Needs 3+ headings to earn
+    // the space. The shell is placed during the render;
+    // its entries are filled in afterwards, when the
+    // heading registry is complete.
+    var tocShell = null, tocAfterIdx = -1;
+    (function () {
+      var hCount = 0, firstPara = -1, topInfo = -1;
+      blocks.forEach(function (bb, ix) {
+        if (bb.type === 'heading') hCount++;
+        if (firstPara < 0 && bb.type === 'paragraph') firstPara = ix;
+        if (topInfo < 0 && bb.type === 'infobox' && ix < 8) topInfo = ix;
+      });
+      if (hCount >= 3) {
+        tocAfterIdx = topInfo >= 0 ? topInfo : firstPara;
+        if (tocAfterIdx >= 0) {
+          tocShell = el('div', 'br-tocbox');
+          var tHead = el('button', 'br-tocbox-head');
+          tHead.appendChild(el('span', 'br-tocbox-chev', '▸'));
+          tHead.appendChild(el('span', '', 'Contents'));
+          tHead.addEventListener('click', function () { tocShell.classList.toggle('br-open'); });
+          tocShell.appendChild(tHead);
+          tocShell.appendChild(el('div', 'br-tocbox-body'));
+        }
+      }
+    })();
     blocks.forEach(function (b, bi) {
       if (textOnly && (b.type === 'image' || b.type === 'video' || b.type === 'embed' || b.type === 'social')) return;
       var n = null;
@@ -1649,7 +1763,19 @@
           var vd = el('video');
           vd.src = b.src; vd.controls = true; vd.setAttribute('playsinline', ''); vd.preload = 'metadata';
           if (b.poster) vd.poster = b.poster;
+          vd.addEventListener('error', function () {
+            // A format WebKit cannot decode (an
+            // ogv-only Wikipedia file): fall back to
+            // the poster with a note instead of dead
+            // player chrome.
+            if (!b.poster) return;
+            vfig.innerHTML = '';
+            var pim2 = el('img'); pim2.src = b.poster; pim2.alt = ''; pim2.setAttribute('data-caption', b.caption || '');
+            vfig.appendChild(pim2);
+            vfig.appendChild(el('figcaption', 'br-figcap', '▶ Video — watch on the original page'));
+          });
           vfig.appendChild(vd);
+          if (b.caption) vfig.appendChild(el('figcaption', 'br-figcap', b.caption));
         } else if (b.poster) {
           var pim = el('img'); pim.src = b.poster; pim.alt = ''; pim.setAttribute('data-caption', '');
           vfig.appendChild(pim);
@@ -1744,7 +1870,20 @@
         }
         var ibRows = el('div', 'br-infobox-rows');
         (b.rows || []).forEach(function (row) {
-          if (row.label) {
+          if (row.media) {
+            var ibMedia = el(row.media.audio ? 'audio' : 'video');
+            ibMedia.src = row.media.src; ibMedia.controls = true;
+            if (!row.media.audio) { ibMedia.setAttribute('playsinline', ''); ibMedia.preload = 'metadata'; if (row.media.poster) ibMedia.poster = row.media.poster; }
+            ibMedia.style.width = '100%';
+            if (row.label) {
+              var ibMR = el('div', 'br-ib-row');
+              ibMR.appendChild(el('span', 'br-ib-label', row.label));
+              var ibMV = el('span', 'br-ib-value');
+              ibMV.appendChild(ibMedia);
+              ibMR.appendChild(ibMV);
+              ibRows.appendChild(ibMR);
+            } else ibRows.appendChild(ibMedia);
+          } else if (row.label) {
             var ibR = el('div', 'br-ib-row');
             ibR.appendChild(el('span', 'br-ib-label', row.label));
             ibR.appendChild(el('span', 'br-ib-value', row.value));
@@ -1766,9 +1905,16 @@
         var gal = el('div', 'br-gallery');
         (b.images || []).forEach(function (gim) {
           var gFig = el('figure');
-          var gImg = el('img'); gImg.src = gim.src; gImg.alt = ''; gImg.loading = 'lazy';
-          gImg.setAttribute('data-caption', gim.caption || '');
-          gFig.appendChild(gImg);
+          if (gim.video) {
+            var gVd = el(gim.audio ? 'audio' : 'video');
+            gVd.src = gim.video; gVd.controls = true;
+            if (!gim.audio) { gVd.setAttribute('playsinline', ''); gVd.preload = 'metadata'; if (gim.src) gVd.poster = gim.src; }
+            gFig.appendChild(gVd);
+          } else {
+            var gImg = el('img'); gImg.src = gim.src; gImg.alt = ''; gImg.loading = 'lazy';
+            gImg.setAttribute('data-caption', gim.caption || '');
+            gFig.appendChild(gImg);
+          }
           if (gim.caption) gFig.appendChild(el('figcaption', '', gim.caption));
           gal.appendChild(gFig);
         });
@@ -1828,7 +1974,23 @@
           insertInto(n);
         }
       }
+      if (tocShell && bi === tocAfterIdx) insertInto(tocShell);
     });
+    if (tocShell) {
+      var tocBody = tocShell.querySelector('.br-tocbox-body');
+      headingRegistry.forEach(function (h) {
+        var item = el('button', 'br-tocitem', h.text);
+        if (h.level > 2) item.style.paddingLeft = (20 + (h.level - 3) * 14) + 'px';
+        item.addEventListener('click', function () {
+          var target = document.getElementById(h.id);
+          if (target) {
+            expandSectionChain(target);
+            if (S.reader) S.reader.scrollTop = target.offsetTop - 70;
+          }
+        });
+        tocBody.appendChild(item);
+      });
+    }
   }
 
   // Embeds (social posts, videos) start loading only once the
@@ -2093,6 +2255,8 @@
   // The popup's "Use Reader Mode on this page": open with whatever
   // the page offers, even when automatic detection said no.
   function forceOpenReader() {
+    // The blocklist overrides force-enable (v1.20.1).
+    if (isBlockedHost(S.host)) { showToast('Reader is blocked on ' + S.host + ' — unblock it from the extension menu'); return; }
     var art = null;
     try { art = extractArticle(document, location.href, true); } catch (e) { art = null; }
     var hasText = art && art.blocks && art.blocks.some(function (b) { return (b.text || '').length > 0; });
@@ -2103,6 +2267,7 @@
   }
 
   function openReader() {
+    if (isBlockedHost(S.host)) return;
     if (!S.detected) S.detected = extractArticle(document, location.href);
     if (!S.detected) return;
     // Two-way scroll sync: the reader opens where the page was
@@ -2741,6 +2906,46 @@
     markCurrentFind();
   }
 
+  // ---------- opening links (v1.20.1 rework) ----------
+  // In-article links wear target="_blank", and a tap
+  // inside the reader's top-layer popover does not
+  // navigate on Orion. v1.18.6 answered with window.open
+  // alone; Kurt reports taps still land dead (only
+  // long-press works). So a tap now goes through three
+  // doors, in order: (1) the background page opens a
+  // real tab via the tabs API — not subject to popup
+  // rules; (2) window.open; (3) same-tab navigation.
+  // A tap must go SOMEWHERE. The stamp keeps the
+  // pointerup tap path and the click path from opening
+  // two tabs for one tap.
+  var linkStamp = { href: '', t: 0 };
+  function openLink(href) {
+    if (!href || !/^https?:\/\//i.test(href)) return false;
+    var now = Date.now();
+    if (linkStamp.href === href && now - linkStamp.t < 900) return true;
+    linkStamp = { href: href, t: now };
+    var settled = false;
+    function fallback() {
+      if (settled) return;
+      settled = true;
+      var w = null;
+      try { w = window.open(href, '_blank'); } catch (e) {}
+      if (!w) { try { location.href = href; } catch (e) {} }
+    }
+    var sent = false;
+    try {
+      var rt = (window.browser && browser.runtime) || (window.chrome && chrome.runtime);
+      if (rt && rt.sendMessage) {
+        var p = rt.sendMessage({ type: 'br:openTab', url: href });
+        sent = true;
+        if (p && p.then) p.then(function (res) { if (res && res.ok) settled = true; else fallback(); }, function () { fallback(); });
+      }
+    } catch (e) {}
+    if (sent) setTimeout(fallback, 1200);
+    else fallback();
+    return true;
+  }
+
   // ---------- footnotes ----------
   function showFootnote(refEl) {
     var pop = S.fnPop;
@@ -2749,7 +2954,18 @@
     if (!note) return;
     pop.innerHTML = '';
     pop.appendChild(el('span', 'br-fnlabel', 'Note ' + cleanText(refEl.textContent)));
-    pop.appendChild(document.createTextNode(note));
+    // When the reference itself carries links (a DOI, a
+    // source URL), the chip stored an HTML variant of the
+    // note — render that so the links stay tappable
+    // (v1.20.1). Plain text otherwise.
+    var noteHtml = refEl.getAttribute('data-notehtml') || '';
+    if (noteHtml) {
+      var ndiv = el('div', 'br-fnhtml');
+      ndiv.innerHTML = noteHtml;
+      pop.appendChild(ndiv);
+    } else {
+      pop.appendChild(document.createTextNode(note));
+    }
     pop.classList.add('br-on');
     var rect = refEl.getBoundingClientRect();
     var w = Math.min(window.innerWidth * 0.84, 340);
@@ -3843,6 +4059,26 @@
         if (!on) S.autoSites = S.autoSites.filter(function (h) { return h !== S.host; });
         storageSet(K.autoSites, S.autoSites);
       });
+      // Global blocklist (v1.20.1): block this site from
+      // right here, with the reader open on it. Blocking
+      // closes the reader, removes the pill, and drops
+      // the site from Always Open so the two lists never
+      // disagree. Unblocking lives in the extension menu
+      // (the reader can't open here anymore — that's the
+      // point of the list).
+      var blockBtn = el('button', 'br-chip', 'Never Open Reader on This Site');
+      blockBtn.style.marginTop = '12px';
+      blockBtn.addEventListener('click', function () {
+        if (S.blocklist.indexOf(S.host) < 0) S.blocklist.push(S.host);
+        storageSet(K.blocklist, S.blocklist);
+        S.autoSites = S.autoSites.filter(function (h) { return h !== S.host; });
+        storageSet(K.autoSites, S.autoSites);
+        closeSheet();
+        closeReader();
+        dismissPill();
+        showToast('Reader blocked on ' + S.host);
+      });
+      secSite.appendChild(blockBtn);
       if (perSite()) {
         var reset = el('button', 'br-chip', 'Reset This Site’s Settings');
         reset.style.marginTop = '12px';
@@ -4665,7 +4901,23 @@
     } catch (e) {}
   }
 
+  // Global blocklist (v1.20.1): an entry blocks its host
+  // AND its subdomains (youtube.com covers m.youtube.com
+  // and music.youtube.com) — a block that the mobile
+  // subdomain slips past would be no block at all. The
+  // list overrides everything else, including the popup's
+  // force-enable toggle (Kurt's spec).
+  function isBlockedHost(host) {
+    if (!host || !S.blocklist || !S.blocklist.length) return false;
+    for (var i = 0; i < S.blocklist.length; i++) {
+      var e = S.blocklist[i];
+      if (host === e || host.slice(-(e.length + 1)) === '.' + e) return true;
+    }
+    return false;
+  }
+
   function detectAndMaybeAuto(upgrade) {
+    if (isBlockedHost(S.host)) return;
     if (S.dismissed || S.open) return;
     if (C.isHomepagePath(location.pathname)) return; // homepages are indexes, not articles
     var art = S.detected || null;
@@ -4718,10 +4970,11 @@
           return;
         }
         if (msg.type !== 'br:settingsChanged') return;
-        Promise.all([storageGet(K.settings, null), storageGet(K.perSite, {}), storageGet(K.autoSites, []), storageGet(K.library, []), storageGet(K.history, [])]).then(function (vals) {
+        Promise.all([storageGet(K.settings, null), storageGet(K.perSite, {}), storageGet(K.autoSites, []), storageGet(K.library, []), storageGet(K.history, []), storageGet(K.blocklist, null)]).then(function (vals) {
           if (vals[0]) S.settings = vals[0];
           S.perSite = vals[1] || {}; S.autoSites = vals[2] || [];
           S.library = vals[3] || []; S.history = vals[4] || [];
+          if (Array.isArray(vals[5])) S.blocklist = vals[5];
           if (S.open) applyAppearance();
         });
       });
@@ -4736,10 +4989,16 @@
     Promise.all([
       storageGet(K.settings, null), storageGet(K.perSite, {}), storageGet(K.autoSites, []),
       storageGet(K.progress, {}), storageGet(K.highlights, {}), storageGet(K.library, []),
-      storageGet(K.history, null), storageGet(K.translations, {})
+      storageGet(K.history, null), storageGet(K.translations, {}), storageGet(K.blocklist, null)
     ]).then(function (vals) {
       S.settings = vals[0] || JSON.parse(JSON.stringify(C.DEFAULT_SETTINGS));
       S.perSite = vals[1] || {}; S.autoSites = vals[2] || [];
+      // Global blocklist (v1.20.1): sites where the reader
+      // never activates. Seeded ONCE with youtube.com and
+      // wsj.com (Kurt's picks) the first time the key is
+      // absent; an emptied list stays empty.
+      if (Array.isArray(vals[8])) S.blocklist = vals[8];
+      else { S.blocklist = ['youtube.com', 'wsj.com']; storageSet(K.blocklist, S.blocklist); }
       S.progress = vals[3] || {}; S.highlights = vals[4] || {}; S.library = vals[5] || [];
       S.translations = vals[7] || {};
       if (Array.isArray(vals[6])) S.history = vals[6];

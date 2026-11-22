@@ -6,10 +6,11 @@
 (function () {
   'use strict';
   var C = window.BRCore;
-  var K = { settings: 'br.settings.v1', autoSites: 'br.autoSites.v1', library: 'br.library.v1', history: 'br.history.v1', ui: 'br.popupUi.v1' };
+  var K = { settings: 'br.settings.v1', autoSites: 'br.autoSites.v1', library: 'br.library.v1', history: 'br.history.v1', ui: 'br.popupUi.v1', blocklist: 'br.blocklist.v1' };
   var P = {
     settings: JSON.parse(JSON.stringify(C.DEFAULT_SETTINGS)),
     autoSites: [],
+    blocklist: [],
     library: [],
     history: [],
     ui: {},
@@ -67,6 +68,58 @@
   }
   function saveSettings() { storageSet(K.settings, P.settings); notifyTab(); }
   function saveSites() { storageSet(K.autoSites, P.autoSites); notifyTab(); }
+  function saveBlocklist() { storageSet(K.blocklist, P.blocklist); notifyTab(); }
+
+  // Global blocklist (v1.20.1): an entry blocks its host
+  // and its subdomains, and overrides Reader Mode. Same
+  // rule the content script enforces.
+  function isBlocked(host) {
+    if (!host) return false;
+    for (var i = 0; i < P.blocklist.length; i++) {
+      var e = P.blocklist[i];
+      if (host === e || host.slice(-(e.length + 1)) === '.' + e) return true;
+    }
+    return false;
+  }
+  function removeBlocked(h) {
+    P.blocklist = P.blocklist.filter(function (x) { return x !== h; });
+    saveBlocklist(); renderBlocked();
+  }
+  function unblockCurrent() {
+    if (!P.tabHost) return;
+    P.blocklist = P.blocklist.filter(function (e) {
+      return !(P.tabHost === e || P.tabHost.slice(-(e.length + 1)) === '.' + e);
+    });
+    saveBlocklist(); renderBlocked(); renderSites();
+  }
+  function renderBlocked() {
+    var blocked = isBlocked(P.tabHost);
+    el('blocked-row').hidden = !blocked;
+    el('blocked-note').hidden = !blocked;
+    // The block list overrides the force-enable toggle
+    // and the per-site auto-open switch (Kurt's spec).
+    el('reader-toggle').disabled = blocked;
+    if (blocked) el('reader-toggle').checked = false;
+    el('cur-toggle').disabled = blocked || !P.tabHost;
+    var sec = el('sec-blocked');
+    sec.hidden = !P.blocklist.length;
+    var list = el('blocked-list');
+    list.innerHTML = '';
+    P.blocklist.forEach(function (h) {
+      var row = document.createElement('div');
+      row.className = 'row';
+      var grow = document.createElement('div');
+      grow.className = 'grow';
+      var hd = document.createElement('div');
+      hd.className = 'host'; hd.textContent = h;
+      grow.appendChild(hd);
+      var rm = document.createElement('button');
+      rm.className = 'plain'; rm.textContent = '✕'; rm.title = 'Unblock ' + h;
+      rm.addEventListener('click', function () { removeBlocked(h); });
+      row.appendChild(grow); row.appendChild(rm);
+      list.appendChild(row);
+    });
+  }
 
   function normalizeHost(raw) {
     var h = String(raw || '').trim().toLowerCase();
@@ -131,6 +184,7 @@
       row.appendChild(grow); row.appendChild(rm);
       list.appendChild(row);
     });
+    renderBlocked();
   }
 
   // The Always Use Reader section folds up; the choice is a
@@ -161,9 +215,11 @@
 
   function wire() {
     el('reader-toggle').addEventListener('change', function (ev) {
+      if (isBlocked(P.tabHost)) { ev.target.checked = false; return; }
       sendToTab({ type: 'br:toggleReader', on: !!ev.target.checked });
       closePopup();
     });
+    el('unblock-btn').addEventListener('click', function () { unblockCurrent(); });
     el('cur-toggle').addEventListener('change', function (ev) {
       if (!P.tabHost) return;
       if (ev.target.checked) addSite(P.tabHost); else removeSite(P.tabHost);
@@ -403,7 +459,7 @@
   }
 
   function init() {
-    Promise.all([storageGet(K.settings, null), storageGet(K.autoSites, []), activeTab(), storageGet(K.library, []), storageGet(K.history, []), storageGet(K.ui, {})]).then(function (vals) {
+    Promise.all([storageGet(K.settings, null), storageGet(K.autoSites, []), activeTab(), storageGet(K.library, []), storageGet(K.history, []), storageGet(K.ui, {}), storageGet(K.blocklist, null)]).then(function (vals) {
       if (vals[0]) {
         Object.keys(C.DEFAULT_SETTINGS).forEach(function (k) {
           if (vals[0][k] !== undefined) P.settings[k] = vals[0][k];
@@ -419,6 +475,11 @@
       P.library = Array.isArray(vals[3]) ? vals[3] : [];
       P.history = Array.isArray(vals[4]) ? vals[4] : [];
       P.ui = vals[5] && typeof vals[5] === 'object' ? vals[5] : {};
+      // Seeded once, same rule as the content script: an
+      // absent key means the starter list; an empty list
+      // the user made stays empty.
+      if (Array.isArray(vals[6])) P.blocklist = vals[6];
+      else { P.blocklist = ['youtube.com', 'wsj.com']; storageSet(K.blocklist, P.blocklist); }
       wire();
       wireTabs();
       queryReaderState();
@@ -431,13 +492,14 @@
       } catch (e) {}
       renderListSection();
       renderSites();
+      renderBlocked();
       renderDefaults();
       renderSaved();
       renderHistory();
     });
   }
 
-  window.__BRPOPUP = { state: P, addSite: addSite, removeSite: removeSite, setSetting: setSetting, normalizeHost: normalizeHost, removeSaved: removeSaved, clearHistory: clearHistory, renderSaved: renderSaved, renderHistory: renderHistory, renderListSection: renderListSection };
+  window.__BRPOPUP = { state: P, addSite: addSite, removeSite: removeSite, setSetting: setSetting, normalizeHost: normalizeHost, removeSaved: removeSaved, clearHistory: clearHistory, renderSaved: renderSaved, renderHistory: renderHistory, renderListSection: renderListSection, isBlocked: isBlocked, unblockCurrent: unblockCurrent, renderBlocked: renderBlocked, removeBlocked: removeBlocked };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();

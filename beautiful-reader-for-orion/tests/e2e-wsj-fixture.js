@@ -35,6 +35,12 @@ const reader = _r.slice(0, _i) + 'window.__BR = S; ' + _r.slice(_i);
 const dom = new JSDOM(html, { url: 'https://www.wsj.com/business/venture-capitalist-vinod-khosla-wsj-money-interview-5ca5a2a5', pretendToBeVisual: true, runScripts: 'outside-only' });
 const w = dom.window;
 w.fetch = () => Promise.reject(new Error('offline'));
+// This suite tests WSJ extraction. Since v1.20.1 wsj.com
+// sits on the seeded global blocklist (Kurt's pick), so
+// the suite empties the list up front to keep exercising
+// the extraction path — blocklist behavior itself is
+// covered by e2e-blocklist.js.
+try { w.localStorage.setItem('br:br.blocklist.v1', '[]'); } catch (e) {}
 w.eval(fs.readFileSync('/home/hatch/workspace/orion-beautiful-reader/reader-core.js', 'utf8'));
 w.eval(reader);
 

@@ -301,8 +301,8 @@
     '.br-gallery figcaption{font-size:.8em;color:var(--br-secondary);line-height:1.4;padding-top:6px}',
     '.br-navbox{border:1px solid var(--br-border,rgba(127,127,127,.25));border-radius:14px;margin:1.6em 0;background:var(--br-card,rgba(127,127,127,.06));font-family:-apple-system,system-ui,sans-serif;overflow:hidden}',
     '.br-navbox-head{width:100%;appearance:none;border:0;background:rgba(127,127,127,.1);color:var(--br-text);font:600 .92em -apple-system,system-ui,sans-serif;text-align:left;padding:12px 14px;cursor:pointer;display:flex;gap:9px;align-items:center}',
-    '.br-navbox-head .br-navbox-chev{transition:transform .2s;color:var(--br-secondary);font-size:.85em}',
-    '.br-navbox.br-open .br-navbox-chev{transform:rotate(90deg)}',
+    '.br-navbox-head .br-navbox-chev{transition:transform .2s;color:var(--br-secondary);display:inline-flex;transform:rotate(-90deg)}',
+    '.br-navbox.br-open .br-navbox-chev{transform:rotate(0deg)}',
     '.br-navbox-body{display:none;padding:6px 14px 12px}',
     '.br-navbox.br-open .br-navbox-body{display:block}',
     '.br-navbox-group{font-size:.85em;line-height:1.5;padding:7px 0;border-top:1px solid rgba(127,127,127,.14)}',
@@ -319,11 +319,12 @@
     '.br-body audio{width:100%;margin:.4em 0 1em}',
     '.br-tocbox{border:1px solid var(--br-border,rgba(127,127,127,.25));border-radius:14px;margin:0 0 1.4em;background:var(--br-card,rgba(127,127,127,.06));font-family:-apple-system,system-ui,sans-serif;overflow:hidden}',
     '.br-tocbox-head{width:100%;appearance:none;border:0;background:rgba(127,127,127,.1);color:var(--br-text);font:600 .95em -apple-system,system-ui,sans-serif;text-align:left;padding:12px 14px;cursor:pointer;display:flex;gap:9px;align-items:center}',
-    '.br-tocbox-head .br-tocbox-chev{transition:transform .2s;color:var(--br-secondary);font-size:.85em}',
-    '.br-tocbox.br-open .br-tocbox-chev{transform:rotate(90deg)}',
+    '.br-tocbox-head .br-tocbox-chev{transition:transform .2s;color:var(--br-secondary);display:inline-flex;transform:rotate(-90deg)}',
+    '.br-tocbox.br-open .br-tocbox-chev{transform:rotate(0deg)}',
     '.br-tocbox-body{display:none;padding:6px 8px 10px}',
     '.br-tocbox.br-open .br-tocbox-body{display:block}',
-    '.br-asec-btn{appearance:none;border:0;background:rgba(127,127,127,.13);color:var(--br-secondary);width:27px;height:27px;border-radius:50%;font-size:14px;line-height:1;cursor:pointer;float:right;margin:2px 0 4px 10px;padding:0;transition:transform .22s}',
+    '.br-asec-btn{appearance:none;border:0;background:rgba(127,127,127,.08);color:var(--br-secondary);width:28px;height:28px;border-radius:50%;cursor:pointer;float:right;margin:3px 0 4px 12px;padding:0;display:flex;align-items:center;justify-content:center;transition:transform .22s,background .2s}',
+    '.br-asec-btn svg{display:block}',
     '.br-asec.br-closed .br-asec-btn{transform:rotate(-90deg)}',
     '.br-asec-body{display:block}',
     '.br-asec.br-closed .br-asec-body{display:none}',
@@ -1690,6 +1691,14 @@
     }
   }
 
+  // One shared disclosure chevron (v1.20.2): a stroked
+  // SVG instead of the ▾/▸ text glyphs — the glyphs
+  // rendered tiny and off-center inside the section
+  // button (Kurt's screenshot: a small triangle lost in
+  // a big dark blob). Points down; closed containers
+  // rotate it -90deg via CSS.
+  var CHEV_SVG = '<svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2.5 4.2 L6 7.7 L9.5 4.2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
   function renderBlocksInto(container, blocks, headingRegistry, byline) {
     var textOnly = !!eff().textOnly;
     // Collapsible sections (v1.20.0): each heading opens a
@@ -1704,28 +1713,31 @@
       var host = secStack.length ? secStack[secStack.length - 1].body : container;
       host.appendChild(node);
     }
-    // In-article Contents box (v1.20.1): sits below the
-    // opening paragraph AND the summary info box (the
-    // infobox, when the article has one up top) — Kurt's
-    // placement. It ALWAYS starts collapsed; only a tap
-    // on its header opens it. Needs 3+ headings to earn
-    // the space. The shell is placed during the render;
-    // its entries are filled in afterwards, when the
-    // heading registry is complete.
-    var tocShell = null, tocAfterIdx = -1;
+    // In-article Contents box (v1.20.1; placement
+    // revised v1.20.2): sits ABOVE the first paragraph
+    // — Kurt's Nov 22 revision of the original
+    // below-the-opening-paragraph placement. On
+    // Wikipedia the infobox still precedes it (the
+    // infobox block renders before the first
+    // paragraph). It ALWAYS starts collapsed; only a
+    // tap on its header opens it. Needs 3+ headings to
+    // earn the space. The shell is placed during the
+    // render; its entries are filled in afterwards,
+    // when the heading registry is complete.
+    var tocShell = null, tocBeforeIdx = -1;
     (function () {
-      var hCount = 0, firstPara = -1, topInfo = -1;
+      var hCount = 0, firstPara = -1, firstHead = -1;
       blocks.forEach(function (bb, ix) {
-        if (bb.type === 'heading') hCount++;
+        if (bb.type === 'heading') { hCount++; if (firstHead < 0) firstHead = ix; }
         if (firstPara < 0 && bb.type === 'paragraph') firstPara = ix;
-        if (topInfo < 0 && bb.type === 'infobox' && ix < 8) topInfo = ix;
       });
       if (hCount >= 3) {
-        tocAfterIdx = topInfo >= 0 ? topInfo : firstPara;
-        if (tocAfterIdx >= 0) {
+        tocBeforeIdx = firstPara >= 0 ? firstPara : firstHead;
+        if (tocBeforeIdx >= 0) {
           tocShell = el('div', 'br-tocbox');
           var tHead = el('button', 'br-tocbox-head');
-          tHead.appendChild(el('span', 'br-tocbox-chev', '▸'));
+          var tChev = el('span', 'br-tocbox-chev'); tChev.innerHTML = CHEV_SVG;
+          tHead.appendChild(tChev);
           tHead.appendChild(el('span', '', 'Contents'));
           tHead.addEventListener('click', function () { tocShell.classList.toggle('br-open'); });
           tocShell.appendChild(tHead);
@@ -1734,6 +1746,7 @@
       }
     })();
     blocks.forEach(function (b, bi) {
+      if (tocShell && bi === tocBeforeIdx) insertInto(tocShell);
       if (textOnly && (b.type === 'image' || b.type === 'video' || b.type === 'embed' || b.type === 'social')) return;
       var n = null;
       if (b.type === 'heading') {
@@ -1923,7 +1936,8 @@
       else if (b.type === 'navbox') {
         var nbx = el('div', 'br-navbox');
         var nbHead = el('button', 'br-navbox-head');
-        nbHead.appendChild(el('span', 'br-navbox-chev', '▸'));
+        var nbChev = el('span', 'br-navbox-chev'); nbChev.innerHTML = CHEV_SVG;
+        nbHead.appendChild(nbChev);
         nbHead.appendChild(el('span', '', 'Browse related · ' + (b.title || 'Related topics')));
         nbx.appendChild(nbHead);
         var nbBody = el('div', 'br-navbox-body');
@@ -1963,7 +1977,7 @@
           secWrap.setAttribute('data-sec', secKey);
           if (S.collapsedSecs && S.collapsedSecs[secKey]) secWrap.classList.add('br-closed');
           var secBody = el('div', 'br-asec-body');
-          var secBtn = el('button', 'br-asec-btn', '▾');
+          var secBtn = el('button', 'br-asec-btn'); secBtn.innerHTML = CHEV_SVG;
           secBtn.setAttribute('aria-label', 'Collapse or expand this section');
           n.appendChild(secBtn);
           secWrap.appendChild(n);
@@ -1974,7 +1988,6 @@
           insertInto(n);
         }
       }
-      if (tocShell && bi === tocAfterIdx) insertInto(tocShell);
     });
     if (tocShell) {
       var tocBody = tocShell.querySelector('.br-tocbox-body');

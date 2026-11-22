@@ -1,4 +1,36 @@
-# Beautiful Reader for Orion — v1.20.1
+# Beautiful Reader for Orion — v1.20.2
+
+## What's new in v1.20.2
+
+Two refinements from Kurt's first v1.20.1 session
+(Nov 22):
+
+Contents box placement. The in-article Contents
+card now sits ABOVE the first paragraph (v1.20.1
+had it below the opening paragraph, per the
+original spec; Kurt reversed it after seeing it
+live). On Wikipedia the infobox still renders
+above it, since the infobox block precedes the
+first paragraph. Everything else about the box is
+unchanged: 3+ headings, always starts collapsed,
+header tap opens it, entry taps unfold folded
+sections on the way.
+
+Disclosure chevrons, redrawn. The section collapse
+button was a text ▾ glyph sitting small and
+off-center inside a heavy dark circle (Kurt's
+screenshot). All three disclosure chevrons — the
+section buttons, the Contents header, the navbox
+header — are now one shared stroked SVG chevron,
+properly centered in a smaller, lighter 28px
+circle (section buttons), pointing down when
+open and rotating to point right when closed.
+
+Verified: e2e-v1201 updated for the new placement
+(15 checks, incl. box above the first paragraph on
+both fixtures and the SVG in the section button);
+full battery 39 suites green.
+
 
 ## What's new in v1.20.1
 

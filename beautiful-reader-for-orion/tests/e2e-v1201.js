@@ -1,13 +1,14 @@
-// v1.20.1: in-article Contents box. Kurt's spec: a
-// table of contents section below the opening
-// paragraph and the usual summary info box (the
-// infobox), ALWAYS collapsed by default, extending
-// only when the user clicks its header. Placement:
-// after the infobox when one sits near the top,
-// otherwise after the first paragraph; needs 3+
+// v1.20.1: in-article Contents box, ALWAYS collapsed
+// by default, extending only when the user clicks its
+// header. Placement revised in v1.20.2 (Kurt, Nov 22):
+// ABOVE the first paragraph — on Wikipedia the
+// infobox block still renders before it. Needs 3+
 // headings. Entries mirror the reader's own heading
 // registry; tapping one expands any folded ancestor
 // sections and jumps, like the Contents sheet.
+// v1.20.2 also swapped the text-glyph chevrons for a
+// stroked SVG on the section buttons, the Contents
+// header, and the navbox header.
 const fs = require('fs');
 const { JSDOM } = require('/tmp/brtest/node_modules/jsdom');
 const core = fs.readFileSync(__dirname + '/../reader-core.js', 'utf8');
@@ -96,7 +97,9 @@ function order(parent, a, b) {
   const ib = body.querySelector('.br-infobox');
   const firstH2 = body.querySelector('.br-asec > h2');
   chk('wiki: box sits below the infobox', !!box && !!ib && order(body, ib, box));
+  chk('wiki: box sits above the first paragraph', !!box && order(body, box, body.querySelector('p')));
   chk('wiki: box sits above the first section', !!box && !!firstH2 && order(body, box, firstH2));
+  chk('wiki: section button carries the SVG chevron', !!body.querySelector('.br-asec-btn svg'));
   chk('wiki: starts collapsed', !!box && !box.classList.contains('br-open'));
   const items = box ? box.querySelectorAll('.br-tocitem') : [];
   chk('wiki: one entry per heading (3)', items.length === 3);
@@ -107,13 +110,13 @@ function order(parent, a, b) {
   await sleep(40);
   chk('wiki: second header tap collapses again', !box.classList.contains('br-open'));
 
-  // ---- Plain article: after the first paragraph, jump expands folded ancestors ----
+  // ---- Plain article: above the first paragraph, jump expands folded ancestors ----
   const w2 = await run(plainHtml, 'https://example.com/bridges/');
   const d2 = w2.document, body2 = d2.querySelector('.br-body');
   const box2 = body2.querySelector('.br-tocbox');
   chk('plain: Contents box exists without an infobox', !!box2);
   const firstP = body2.querySelector('p');
-  chk('plain: box below the opening paragraph', !!box2 && !!firstP && order(body2, firstP, box2));
+  chk('plain: box above the first paragraph', !!box2 && !!firstP && order(body2, box2, firstP));
   chk('plain: starts collapsed', !!box2 && !box2.classList.contains('br-open'));
   const design = [...body2.querySelectorAll('.br-asec > h2')].find(h => h.textContent.indexOf('Design') >= 0);
   design.dispatchEvent(new w2.MouseEvent('click', { bubbles: true, cancelable: true }));

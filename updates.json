@@ -61,6 +61,10 @@
         {
           "version": "1.20.1",
           "update_link": "https://muse.ai/files/665768643292256/1285299890485382/s67glixdhhltkbkvz4r78a3o/beautiful-reader-orion-1.20.1.xpi"
+        },
+        {
+          "version": "1.20.2",
+          "update_link": "https://muse.ai/files/665768643292256/1513584834259713/nlthhprov41we86llqxgi3uk/beautiful-reader-orion-1.20.2.xpi"
         }
       ]
     },

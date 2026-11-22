@@ -18,7 +18,7 @@ ok(W.isVeil({ coverPct: 100, positioned: true, textLen: 0, hasInteractive: false
 ok(!W.isVeil({ coverPct: 100, positioned: true, textLen: 0, hasInteractive: true, bgOpaque: true }), 'interactive layer is NOT a veil');
 ok(W.PREHIDE_CSS.includes('error-report.com'), 'prehide CSS present');
 const mf = JSON.parse(fs.readFileSync(__dirname + '/../manifest.json', 'utf8'));
-ok(mf.version === '1.19.1', 'manifest version 1.19.1');
+ok(mf.version === '1.19.2', 'manifest version 1.19.2');
 ok(mf.content_scripts[0].run_at === 'document_start' && mf.content_scripts[0].js[0] === 'wallbreaker.js', 'wallbreaker runs at document_start');
 ok(mf.content_scripts[1].js.join() === 'reader-core.js,reader.js', 'reader scripts unchanged, still document_idle');
 ok(mf.permissions.includes('webRequestBlocking'), 'webRequestBlocking permission present');

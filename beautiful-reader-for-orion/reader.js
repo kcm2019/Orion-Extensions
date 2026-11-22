@@ -329,8 +329,22 @@
     return '';
   }
 
+  // The author declared this element hidden: the HTML hidden
+  // attribute, or the 'hidden' class token (the Tailwind /
+  // Bootstrap display:none utility). A separate, harder signal
+  // than the name patterns — the walk's article-rescue must not
+  // override it (PC Gamer's newsletter modal is text-heavy
+  // enough to look "article-like" and was rescued straight
+  // past its newsletter/modal name match).
+  function isHiddenSignal(node) {
+    if (node.hidden) return true;
+    var cls = (node.getAttribute && node.getAttribute('class')) || '';
+    return /(^|\s)hidden(\s|$)/.test(cls);
+  }
+
   function shouldSkip(node) {
     if (SKIP_TAGS[node.tagName]) return true;
+    if (isHiddenSignal(node)) return true;
     if (node.id && node.id.indexOf('br-') === 0) return true;
     var cls = (node.getAttribute && (node.getAttribute('class') || '')) + ' ' + (node.id || '');
     if (SKIP_RE.test(cls)) return true;
@@ -536,6 +550,15 @@
     for (var ci = 0; ci < all.length; ci++) {
       var ct = all[ci].tagName.toLowerCase();
       if (ct === 'p' || INLINE_TAGS[ct]) continue;
+      // Raw-text elements are not prose containers: a <script>'s
+      // text node is "direct inline content" to looseRuns, so
+      // embedded JSON/config blobs were counted as paragraphs —
+      // and flagged as legal boilerplate (their keys are full
+      // of 'consent'/'privacy'), which pushed boilerRatio over
+      // the candidate gate and killed detection entirely on
+      // script-heavy pages (PC Gamer: 37k of 43k "paragraph"
+      // chars were script text, boilerRatio 0.61, no pill).
+      if (ct === 'script' || ct === 'style' || ct === 'noscript' || ct === 'template') continue;
       containers.push(all[ci]);
     }
     var looseParas = 0;
@@ -634,7 +657,7 @@
         if (brRun >= 2) flushLoose(); else loose.push(child);
         continue;
       }
-      if (shouldSkip(child) && !(rescue && articleLikeContainer(child))) { flushLoose(); continue; }
+      if (shouldSkip(child) && !(rescue && !isHiddenSignal(child) && !visuallyHidden(child) && articleLikeContainer(child))) { flushLoose(); continue; }
       // A caption element trailing its image under the same
       // wrapper (not a <figcaption>): attach it to the image
       // block it follows instead of emitting it as stray text.

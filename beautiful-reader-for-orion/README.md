@@ -1,4 +1,43 @@
-# Beautiful Reader for Orion — v1.19.1
+# Beautiful Reader for Orion — v1.19.2
+
+## What's new in v1.19.2
+
+PC Gamer (and the whole Future plc template family)
+got no pill at all — the page read as a white screen
+with no reader. Diagnosed on the article's actual
+HTML, two extraction bugs:
+
+- **Script text poisoned the article scoring.**
+  candidateStats counted <script>/<style> text as
+  loose paragraphs. PC Gamer embeds ~39k chars of
+  JSON/config inside its <article>; those blobs are
+  full of 'consent'/'privacy', so 26.6k chars were
+  flagged as legal boilerplate, boilerRatio hit
+  0.61, and every candidate on the page failed the
+  boiler gate — no detection, no pill. Raw-text
+  elements (script/style/noscript/template) are no
+  longer treated as prose containers. After the
+  fix the article extracts cleanly: hero image,
+  all six story paragraphs in order, second image,
+  author bio.
+- **A hidden modal was rescued into the article.**
+  The walk's article-rescue (for mislabeled article
+  containers) could override a skip on a subtree the
+  page itself hides; PC Gamer's newsletter
+  confirmation modal is text-heavy enough to look
+  article-like, so 'You are now subscribed' /
+  'Join the club' opened the extracted story. A
+  declared-hidden element (hidden attribute, or
+  the 'hidden' display:none utility class) is now
+  a hard skip, and the rescue also refuses
+  visually-hidden subtrees.
+
+New regression suite: tests/e2e-v1192.js (7 checks;
+fails 3 on the v1.19.1 code, passes on this one).
+The rest of the battery's failure profile is
+unchanged from the shipped v1.19.1 in the same
+environment (verified side by side).
+
 
 ## What's new in v1.19.1
 

@@ -1,4 +1,8 @@
-// v1.18.6: social embeds + link taps.
+// v1.18.6: social embeds + link taps. Updated v1.19.1:
+// X posts render as native cards (no platform iframe —
+// the Tweet.html widget renders blank on Orion/WebKit
+// while still firing load); the iframe path and its
+// watchdog now cover the other platforms (Instagram here).
 // - Embed iframes get their src only AFTER the reader is up
 //   and any page-kill has run (a load that meets window.stop()
 //   sits blank forever), and the purge no longer removes the
@@ -39,9 +43,20 @@ const html = `<!DOCTYPE html><html><head><title>Rizzler Cameo</title>
 </body></html>`;
 const URL = 'https://www.thebiglead.example/rizzler-cameo';
 
+const igHtml = `<!DOCTYPE html><html><head><title>Harbor Shoot</title>
+<meta property="og:title" content="Harbor Shoot">
+</head><body>
+<main><article>
+<h1>Harbor Shoot</h1>
+<p>${P(1)}</p>
+<blockquote class="instagram-media" data-instgrm-permalink="https://www.instagram.com/p/Cabc123XYZ/"><p>Sunset over the harbor from last night's shoot, shot on film and worth every minute of the wait.</p>— Photo Daily (@photodaily) <a href="https://www.instagram.com/p/Cabc123XYZ/">View this post</a></blockquote>
+<p>${P(3)}</p><p>${P(4)}</p><p>${P(5)}</p><p>${P(6)}</p>
+</article></main>
+</body></html>`;
+
 function makePage(opts) {
   opts = opts || {};
-  const dom = new JSDOM(html, { url: URL, pretendToBeVisual: true, runScripts: 'outside-only' });
+  const dom = new JSDOM(opts.html || html, { url: URL, pretendToBeVisual: true, runScripts: 'outside-only' });
   const w = dom.window;
   w.fetch = () => Promise.reject(new Error('offline'));
   if (opts.hostile) w.sessionStorage.setItem('br_hostile', '1');
@@ -61,12 +76,14 @@ async function openViaPill(w) {
 }
 
 (async () => {
-  // --- A: calm page — embed activates with the platform URL ---
+  // --- A: calm page — X post is a native card, no iframe ---
   const w = makePage();
   chk('reader opens (calm)', await openViaPill(w));
-  const frame = w.document.querySelector('.br-social-frame');
-  chk('social frame rendered', !!frame);
-  chk('frame src is the official tweet embed', !!frame && (frame.getAttribute('src') || '').indexOf('platform.twitter.com/embed/Tweet.html?id=1850000000000000000') >= 0);
+  chk('x post renders natively (no iframe)', !w.document.querySelector('.br-social-frame'));
+  const xbody = w.document.querySelector('.br-x-body');
+  chk('x card carries the tweet id', !!xbody && xbody.getAttribute('data-xid') === '1850000000000000000');
+  const xt = w.document.querySelector('.br-x-text');
+  chk('x card shows the captured text while offline', !!xt && xt.textContent.indexOf('Rizzler just changed television') >= 0);
   chk('no deferred embeds left', w.document.querySelectorAll('#br-reader iframe[data-src]').length === 0);
 
   // --- D: link taps (same calm page) ---
@@ -81,23 +98,22 @@ async function openViaPill(w) {
   para.dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
   chk('plain paragraph tap opens nothing', opened.length === 1);
 
-  // --- B: hostile page — kill runs, reader embed survives ---
+  // --- B: hostile page — kill runs, the X card survives ---
   const w2 = makePage({ hostile: true });
   const openedB = await waitFor(() => isOpen(w2));
   chk('reader opens (hostile)', openedB);
   await sleep(1700); // several purge ticks
-  const frame2 = w2.document.querySelector('.br-social-frame');
-  chk('social frame survives the purge', !!frame2);
-  chk('surviving frame carries its src', !!frame2 && (frame2.getAttribute('src') || '').indexOf('Tweet.html?id=1850000000000000000') >= 0);
+  chk('x card survives the purge', !!w2.document.querySelector('.br-x-body'));
   chk('page ad iframe was purged', !w2.document.querySelector('#ad-slot iframe'));
 
-  // --- C: embed never loads — captured text takes its place ---
-  const w3 = makePage({ embedLoadMs: 60 });
+  // --- C: iframe embed never loads — captured text takes its
+  // place (Instagram keeps the iframe + watchdog path) ---
+  const w3 = makePage({ embedLoadMs: 60, html: igHtml });
   chk('reader opens (watchdog)', await openViaPill(w3));
   await sleep(500);
   chk('dead frame replaced', !w3.document.querySelector('.br-social-frame'));
   const st = w3.document.querySelector('.br-social-text');
-  chk('fallback shows the tweet text', !!st && st.textContent.indexOf('Rizzler just changed television') >= 0);
+  chk('fallback shows the post text', !!st && st.textContent.indexOf('Sunset over the harbor') >= 0);
   chk('fallback keeps the view link', !!w3.document.querySelector('.br-social-link'));
 
   console.log(fail ? fail + ' FAILURES' : 'ALL EMBEDS PASS');

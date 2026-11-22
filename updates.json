@@ -41,6 +41,10 @@
         {
           "version": "1.19.0",
           "update_link": "https://muse.ai/files/665768643292256/1494288145951609/95n6sw1aj05vdy3krnt0pxsr/beautiful-reader-orion-1.19.0.xpi"
+        },
+        {
+          "version": "1.19.1",
+          "update_link": "https://muse.ai/files/665768643292256/1712762720552364/hhizjz9jkdfdm9nsfpn6ayug/beautiful-reader-orion-1.19.1.xpi"
         }
       ]
     },
@@ -77,6 +81,10 @@
         {
           "version": "0.12.5",
           "update_link": "https://muse.ai/files/665768643292256/1503912634978239/30ksz97h73sa4pjhdmsxxa9s/heckyeah-orion-0.12.5.xpi"
+        },
+        {
+          "version": "0.12.6",
+          "update_link": "https://muse.ai/files/665768643292256/1675026043980957/2twn1hod6ueul6ckzlxxnmzq/heckyeah-orion-0.12.6.xpi"
         }
       ]
     }

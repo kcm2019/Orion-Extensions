@@ -1,4 +1,38 @@
-# Beautiful Reader for Orion — v1.19.0
+# Beautiful Reader for Orion — v1.19.1
+
+## What's new in v1.19.1
+
+Two fixes from Kurt's Nov 21 reports:
+
+- **X embeds actually show the post.** The card used
+  X's Tweet.html widget in an iframe; on Orion/WebKit
+  the widget's document loads — so the blank-embed
+  watchdog stayed quiet — and then renders nothing,
+  leaving a tall empty box (Instagram's embed, which
+  renders server-side, worked). TechSpot embeds the
+  post as a bare iframe, so there wasn't even captured
+  text to fall back on. X posts are now **native
+  cards**: the reader fetches the tweet from X's
+  syndication JSON (the same endpoint the widget uses,
+  with the widget's id-derived token — verified live
+  against the TechSpot article's post) and renders
+  author + avatar, the full text with t.co links
+  expanded, photos whole, videos as native players
+  (best MP4 ≤ 2.5 Mbps with the tweet's thumbnail as
+  poster), a quoted-post box, and date/like/reply
+  counts. If the fetch fails (deleted/protected post,
+  no network), the card keeps whatever text was
+  captured at extraction, or a plain "could not be
+  loaded" note — never a void. Instagram/Facebook/
+  TikTok keep the iframe + watchdog path.
+- **Image viewer no longer opens half-faded.** While
+  a swipe-to-dismiss drag is tracked, the viewer
+  writes its own inline opacity; nothing cleared it,
+  so the next image opened stuck at that partial fade
+  with the reader showing through — until a tap reset
+  it. First opens were always clean, which is why it
+  looked intermittent. Open and close now both clear
+  the stale inline opacity.
 
 ## What's new in v1.19.0
 

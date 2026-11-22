@@ -202,6 +202,19 @@
     '.br-social-text{padding:16px 16px 6px;font-size:.96em;line-height:1.55;white-space:pre-wrap}',
     '.br-social-author{padding:2px 16px 14px;color:var(--br-secondary);font-size:.86em}',
     '.br-social-link{display:block;padding:12px 16px;border-top:1px solid var(--br-faint);color:#0A84FF;text-decoration:none;font:600 14px -apple-system,system-ui,sans-serif}',
+    '.br-x-body{padding:14px 16px 13px}',
+    '.br-x-body .br-social-author{padding:4px 0 0}',
+    '.br-x-head{display:flex;gap:10px;align-items:center;margin-bottom:9px}',
+    '.br-x-ava{width:40px;height:40px;border-radius:50%;flex:none}',
+    '.br-x-name{font-weight:700;font-size:15px;line-height:1.25}',
+    '.br-x-handle{color:var(--br-secondary);font-size:13.5px}',
+    '.br-x-text{font-size:.97em;line-height:1.55;white-space:pre-wrap;overflow-wrap:break-word}',
+    '.br-x-media{margin-top:10px}',
+    '.br-x-media img{width:100%;height:auto;border-radius:12px;display:block}',
+    '.br-x-media video{width:100%;height:auto;border-radius:12px;display:block;background:#000}',
+    '.br-x-quote{margin-top:10px;border:1px solid var(--br-faint);border-radius:12px;padding:10px 12px}',
+    '.br-x-meta{margin-top:10px;color:var(--br-secondary);font-size:13px}',
+    '.br-x-load{color:var(--br-secondary);font-size:14px}',
     // PDF export: print ONLY the reader-view clone.
     '#br-print{display:none}',
     '@media print{html,body{overflow:visible!important;height:auto!important}body>*:not(#br-reader){display:none!important}#br-reader{position:static!important;overflow:visible!important;opacity:1!important;height:auto!important}#br-reader>*:not(#br-print){display:none!important}#br-print{display:block!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}#br-print .br-article{margin:0 auto}#br-print img{transform:none!important}#br-print figure{break-inside:avoid}}',
@@ -1363,7 +1376,24 @@
         sh.appendChild(el('span', 'br-social-ic', b.platform === 'x' ? '𝕏' : b.platform === 'instagram' ? '◎' : b.platform === 'facebook' ? 'f' : b.platform === 'tiktok' ? '♪' : '◉'));
         sh.appendChild(el('span', '', b.label || 'Post'));
         sw.appendChild(sh);
-        if (b.embedUrl) {
+        var xid = b.platform === 'x' ? xTweetId(b) : '';
+        if (xid) {
+          // X posts render as a NATIVE card (v1.19.1), never
+          // the platform iframe: on Orion/WebKit the
+          // Tweet.html widget loads its document — so the
+          // load watchdog stays quiet — and then renders
+          // nothing, leaving a 560px empty box (Kurt's
+          // TechSpot screenshot, Nov 21). The card starts
+          // with whatever was captured at extraction and
+          // activateXCards() fills it from X's syndication
+          // JSON (author, avatar, full text, media, counts).
+          var xb = el('div', 'br-x-body');
+          xb.setAttribute('data-xid', xid);
+          if (b.text) xb.appendChild(el('p', 'br-x-text', b.text));
+          if (b.author) xb.appendChild(el('p', 'br-social-author', b.author));
+          if (!b.text && !b.author) xb.appendChild(el('p', 'br-x-load', 'Loading post…'));
+          sw.appendChild(xb);
+        } else if (b.embedUrl) {
           var sif = el('iframe');
           // No src yet: activateEmbeds() assigns it once the
           // reader is fully up (see there for why).
@@ -1371,15 +1401,15 @@
           sif.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups');
           sif.setAttribute('allow', 'autoplay; fullscreen; picture-in-picture; encrypted-media');
           sif.className = 'br-social-frame';
-          sif.style.height = (b.platform === 'tiktok' ? 580 : b.platform === 'x' ? 560 : b.platform === 'facebook' ? 520 : 500) + 'px';
+          sif.style.height = (b.platform === 'tiktok' ? 580 : b.platform === 'facebook' ? 520 : 500) + 'px';
           sw.appendChild(sif);
         } else {
           if (b.text) sw.appendChild(el('p', 'br-social-text', b.text));
           if (b.author) sw.appendChild(el('p', 'br-social-author', b.author));
         }
-        if (b.url) {
+        if (b.url || xid) {
           var sa = el('a', 'br-social-link', 'View on ' + (b.label || 'site') + ' ↗');
-          sa.href = b.url; sa.target = '_blank'; sa.rel = 'noopener noreferrer';
+          sa.href = b.url || ('https://x.com/i/status/' + xid); sa.target = '_blank'; sa.rel = 'noopener noreferrer';
           sw.appendChild(sa);
         }
         n = sw;
@@ -1425,6 +1455,7 @@
       if (f.classList.contains('br-social-frame')) armSocialWatchdog(f);
       f.src = src;
     }
+    activateXCards();
   }
 
   // If a social embed never finishes loading (platform
@@ -1444,6 +1475,109 @@
       if (!b.text && !b.author) frag.appendChild(el('p', 'br-social-text', 'This post could not be loaded here.'));
       f.parentNode.replaceChild(frag, f);
     }, S.embedLoadMs || 9000);
+  }
+
+  // ---------- native X cards (v1.19.1) ----------
+  // The tweet id lives in the post URL, or only inside the
+  // embed URL for iframe-sourced posts (TechSpot style).
+  function xTweetId(b) {
+    var m = String(b.url || '').match(/\/status\/(\d+)/) ||
+      String(b.embedUrl || '').match(/[?&]id=(\d+)/) ||
+      String(b.embedUrl || '').match(/\/status\/(\d+)/);
+    return m ? m[1] : '';
+  }
+  // The syndication endpoint answers {} unless the request
+  // carries the same token X's own widget computes from the
+  // tweet id — plain double arithmetic, exactly as the
+  // widget does it (verified live, Nov 21).
+  function xToken(id) {
+    return ((Number(id) / 1e15) * Math.PI).toString(36).replace(/(0+|\.)/g, '');
+  }
+  function activateXCards() {
+    if (!S.reader) return;
+    var bodies = S.reader.querySelectorAll('.br-x-body[data-xid]');
+    for (var i = 0; i < bodies.length; i++) fillXCard(bodies[i]);
+  }
+  function fillXCard(xb) {
+    var id = xb.getAttribute('data-xid');
+    if (!id || xb.getAttribute('data-xdone')) return;
+    xb.setAttribute('data-xdone', '1');
+    if (S.xCache && S.xCache[id]) { renderXCard(xb, S.xCache[id]); return; }
+    fetch('https://cdn.syndication.twimg.com/tweet-result?id=' + encodeURIComponent(id) + '&lang=en&token=' + xToken(id))
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d || !d.text || !d.user) throw new Error('no tweet');
+        (S.xCache = S.xCache || {})[id] = d;
+        if (xb.isConnected) renderXCard(xb, d);
+      })
+      .catch(function () {
+        // Deleted/protected post or no network: whatever was
+        // captured at extraction stays; if the card holds
+        // only the loading note, say so plainly.
+        var load = xb.querySelector('.br-x-load');
+        if (load) load.textContent = 'This post could not be loaded here.';
+      });
+  }
+  function compactCount(n) {
+    return n >= 1000 ? (Math.round(n / 100) / 10) + 'K' : String(n);
+  }
+  function renderXCard(xb, d) {
+    xb.innerHTML = '';
+    var head = el('div', 'br-x-head');
+    if (d.user.profile_image_url_https) {
+      var av = el('img', 'br-x-ava');
+      av.src = String(d.user.profile_image_url_https).replace('_normal.', '_bigger.');
+      av.alt = '';
+      head.appendChild(av);
+    }
+    var who = el('div');
+    who.appendChild(el('div', 'br-x-name', d.user.name || ''));
+    who.appendChild(el('div', 'br-x-handle', '@' + (d.user.screen_name || '')));
+    head.appendChild(who);
+    xb.appendChild(head);
+    var text = String(d.text || '');
+    var range = d.display_text_range;
+    if (range && range.length === 2) text = text.slice(range[0], range[1]);
+    var urls = (d.entities && d.entities.urls) || [];
+    urls.forEach(function (u) { if (u.url && u.display_url) text = text.split(u.url).join(u.display_url); });
+    xb.appendChild(el('p', 'br-x-text', text.trim()));
+    var media = el('div', 'br-x-media');
+    (d.mediaDetails || []).forEach(function (md) {
+      if (md.type === 'photo' && md.media_url_https) {
+        var im = el('img'); im.src = md.media_url_https; im.alt = ''; im.loading = 'lazy';
+        media.appendChild(im);
+      } else if (md.type === 'video') {
+        var vars = ((md.video_info && md.video_info.variants) || []).filter(function (v) { return v.content_type === 'video/mp4'; });
+        vars.sort(function (p, q) { return (q.bitrate || 0) - (p.bitrate || 0); });
+        var pick = null;
+        for (var vi = 0; vi < vars.length; vi++) if ((vars[vi].bitrate || 0) <= 2500000) { pick = vars[vi]; break; }
+        if (!pick && vars.length) pick = vars[vars.length - 1];
+        if (pick) {
+          var vd = el('video');
+          vd.src = pick.url; vd.controls = true; vd.setAttribute('playsinline', ''); vd.preload = 'metadata';
+          if (md.media_url_https) vd.poster = md.media_url_https;
+          media.appendChild(vd);
+        } else if (md.media_url_https) {
+          var pim = el('img'); pim.src = md.media_url_https; pim.alt = '';
+          media.appendChild(pim);
+        }
+      }
+    });
+    if (media.childNodes.length) xb.appendChild(media);
+    if (d.quoted_tweet && d.quoted_tweet.text && d.quoted_tweet.user) {
+      var q = el('div', 'br-x-quote');
+      q.appendChild(el('div', 'br-x-name', (d.quoted_tweet.user.name || '') + ' @' + (d.quoted_tweet.user.screen_name || '')));
+      q.appendChild(el('p', 'br-x-text', String(d.quoted_tweet.text)));
+      xb.appendChild(q);
+    }
+    var meta = [];
+    if (d.created_at) {
+      var dt = new Date(d.created_at);
+      if (!isNaN(dt.getTime())) meta.push(dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }));
+    }
+    if (d.favorite_count) meta.push(compactCount(d.favorite_count) + ' likes');
+    if (d.conversation_count) meta.push(compactCount(d.conversation_count) + ' replies');
+    if (meta.length) xb.appendChild(el('div', 'br-x-meta', meta.join('  ·  ')));
   }
 
   // Re-render after a view-mode change (text-only) without
@@ -2653,6 +2787,16 @@
     V.cap.style.display = cap ? '' : 'none';
     V.scale = 1; V.tx = 0; V.ty = 0; V.pointers = {};
     V.apply();
+    // Clear the drag-fade residue (v1.19.1): while a swipe
+    // is tracked, pointermove writes the viewer's INLINE
+    // opacity, and nothing ever removed it — the next open
+    // inherited the half-faded value (inline style beats
+    // the .br-vis class), so the viewer sat stuck with the
+    // reader showing through until a tap's pointerup reset
+    // it to '1' (Kurt's report, Nov 21: first image fine,
+    // later images half-focused until tapped again).
+    V.el.style.opacity = '';
+    V.stage.style.transition = '';
     // Fade in. Class-based, with a forced style flush at
     // opacity 0 before the visible class flips — depending on
     // requestAnimationFrame left the viewer invisible forever
@@ -2679,6 +2823,7 @@
       setTimeout(function () {
         v.classList.remove('br-on');
         v.style.display = '';
+        v.style.opacity = '';
         V.stage.style.transition = '';
         V.scale = 1; V.tx = 0; V.ty = 0; V.apply();
       }, 250);
@@ -2688,6 +2833,7 @@
       setTimeout(function () {
         v.classList.remove('br-on');
         v.style.display = '';
+        v.style.opacity = '';
         V.scale = 1; V.tx = 0; V.ty = 0; V.apply();
       }, 235);
     }

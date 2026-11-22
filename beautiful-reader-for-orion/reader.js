@@ -319,7 +319,7 @@
 
   // ---------- extraction ----------
   var SKIP_TAGS = { SCRIPT: 1, STYLE: 1, NOSCRIPT: 1, NAV: 1, HEADER: 1, FOOTER: 1, ASIDE: 1, FORM: 1, BUTTON: 1, SELECT: 1, TEXTAREA: 1, INPUT: 1, SVG: 1, AUDIO: 1, CANVAS: 1 };
-  var SKIP_RE = /(^|[-_\s])(ad|ads|advert|sidebar|comment|share|social|related|promo|newsletter|cookie|popup|modal|menu|nav|breadcrumb|pagination|recommend|subscribe|signup|sign-up|toolbar|widget|consent|onetrust|trustarc|sourcepoint|gdpr|ccpa)s?([-_\s]|$)/i;
+  var SKIP_RE = /(^|[-_\s])(ad|ads|advert|sidebar|comment|share|social|related|promo|newsletter|cookie|popup|modal|menu|nav|breadcrumb|pagination|recommend|read-next|subscribe|signup|sign-up|toolbar|widget|consent|onetrust|trustarc|sourcepoint|gdpr|ccpa)s?([-_\s]|$)/i;
 
   function meta(doc, names) {
     for (var i = 0; i < names.length; i++) {
@@ -943,9 +943,17 @@
     // column) pruned the story subtree wholesale. Re-walk the body
     // allowing descent into skipped containers that are themselves
     // article-like; true sidebars and consent boxes stay pruned.
+    // The trigger is relative, not just "<400 chars": furniture
+    // alone can clear 400 chars while the story stays pruned
+    // (Business Insider wraps the whole story in a div named
+    // "image-modal" — the first walk harvested 149 words of
+    // byline/slogan/bio, passed the readability gates, and the
+    // rescue AND the JSON-LD fallback both stayed off). If the
+    // walk kept less than half the paragraph text the winner's
+    // own stats counted, a major subtree was pruned — rescue.
     var preText = 0;
     blocks.forEach(function (b) { if (b.text) preText += b.text.length; if (b.items) preText += b.items.join(' ').length; });
-    if (preText < 400 && doc.body) {
+    if ((preText < 400 || preText < bestStats.textLength * 0.5) && doc.body) {
       var bodyStats = candidateStats(doc.body);
       if (bodyStats.textLength >= 900) {
         var rb = [], rs = {};
@@ -999,6 +1007,20 @@
       legalIdx.forEach(function (bi) { dropL[bi] = 1; });
       blocks = blocks.filter(function (b, bi) { return !dropL[bi]; });
     }
+    // Repeated identical headings are template furniture, not
+    // structure: a story never prints the same section heading
+    // four times, but card rails do (Business Insider's
+    // read-next touts all carry the site slogan as their <h3>
+    // placeholder). Keep the first, drop the repeats.
+    var seenHead = {};
+    blocks = blocks.filter(function (b) {
+      if (b.type !== 'heading') return true;
+      var key = (b.text || '').toLowerCase();
+      if (!key) return true;
+      if (seenHead[key]) return false;
+      seenHead[key] = 1;
+      return true;
+    });
     // Subtitle first: a promoted dek heading must not shield the byline
     // fragments behind it from the strip below.
     var description = ld.description || meta(doc, ['og:description', 'description', 'twitter:description']) || '';

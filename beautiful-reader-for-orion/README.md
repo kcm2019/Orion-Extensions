@@ -1,4 +1,43 @@
-# Beautiful Reader for Orion — v1.19.2
+# Beautiful Reader for Orion — v1.19.3
+
+## What's new in v1.19.3
+
+Business Insider opened with no article body at all
+— byline, slogan headings and the author bio, but
+not one story paragraph. Diagnosed on the article's
+actual HTML:
+
+- **The rescue walk's trigger was too weak.** BI
+  wraps the whole story in a <div class="image-modal">,
+  which the first walk prunes by name. What it
+  harvested instead — 149 words of furniture — still
+  passed the readability gates, so the rescue walk
+  (which only ran below 400 harvested chars) and
+  the JSON-LD fallback (which only runs when the
+  result is NOT readable) both stayed off. The
+  trigger is now relative: if the walk kept less
+  than half the paragraph text the winning
+  candidate's own stats counted, a major subtree
+  was pruned and the rescue walk runs, descending
+  into skipped containers that are themselves
+  article-like (the image-modal div's stats are:
+  7k chars, 3% links, no boilerplate). On the real
+  page: 149 words of junk -> 1,145 words, the full
+  story from the 2 a.m. lede to the closing
+  no-comment line, headings and images intact.
+- **Card rails pruned by name, repeated headings
+  dropped.** 'read-next' joins the skip names, and
+  the cleanup pass now drops a heading whose text
+  exactly repeats an earlier heading — BI's
+  read-next touts carry the site slogan as their
+  <h3> placeholder four times over; a real story
+  never repeats a section heading verbatim.
+
+New regression suite: tests/e2e-v1193.js (7 checks;
+fails detection entirely on the v1.19.2 code).
+Rest of the battery green, including e2e-rescue
+and e2e-bi-late.
+
 
 ## What's new in v1.19.2
 

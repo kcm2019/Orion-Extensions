@@ -48,6 +48,7 @@
     wallBreaker: true, // v1.10.0: page-level anti-adblock wall breaking (wallbreaker.js)
     translateTarget: 'en', // v1.19.0: article translation target language (Google engine)
     translateAuto: false, // v1.19.0: auto-translate on open when the article is in another language
+    hideCitations: false, // v1.20.0: hide in-text citation chips ([12]) for clean reading; the reference list stays
     autoAll: false, // v1.18.5: auto-open the reader on ANY site with a detected article (popup toggle)
     pillPos: null // {side:'left'|'right', top:number}
   };

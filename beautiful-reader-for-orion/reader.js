@@ -279,6 +279,48 @@
     '#br-findbar .br-fcount{color:rgba(255,255,255,.75);font-size:12.5px;min-width:38px;text-align:center}',
     '#br-findbar button{appearance:none;border:0;background:transparent;color:#fff;font-size:16px;padding:7px 9px;cursor:pointer}',
     '.br-body sup.br-fnref{color:#0A84FF;font-weight:700;cursor:pointer;padding:0 1px}',
+    /* v1.20.0: Wikipedia blocks, galleries, navboxes, styled tables, collapsible sections */
+    '#br-reader.br-nocites .br-body sup.br-fnref{display:none}',
+    '.br-hatnote{font-style:italic;color:var(--br-secondary);font-size:.92em;line-height:1.5;margin:0 0 1.1em;padding:9px 13px;background:var(--br-card,rgba(127,127,127,.09));border-radius:10px}',
+    '.br-hatnote a{color:#0A84FF}',
+    '.br-infobox{border:1px solid var(--br-border,rgba(127,127,127,.25));border-radius:14px;overflow:hidden;margin:0 0 1.4em;background:var(--br-card,rgba(127,127,127,.06));font-family:-apple-system,system-ui,sans-serif}',
+    '.br-infobox-title{font-weight:700;font-size:1.02em;text-align:center;padding:11px 14px;background:rgba(127,127,127,.12);line-height:1.35}',
+    '.br-infobox figure{margin:0}',
+    '.br-infobox img{width:100%;display:block}',
+    '.br-infobox figcaption{font-size:.8em;color:var(--br-secondary);text-align:center;padding:7px 12px 9px;line-height:1.4}',
+    '.br-infobox-rows{padding:4px 0}',
+    '.br-ib-row{display:flex;gap:12px;padding:7px 14px;font-size:.86em;line-height:1.45;border-top:1px solid rgba(127,127,127,.14)}',
+    '.br-ib-row:first-child{border-top:0}',
+    '.br-ib-label{flex:0 0 34%;font-weight:600;color:var(--br-text)}',
+    '.br-ib-value{flex:1;color:var(--br-text);min-width:0;overflow-wrap:break-word}',
+    '.br-ib-full{padding:7px 14px;font-size:.86em;line-height:1.45;border-top:1px solid rgba(127,127,127,.14)}',
+    '.br-ib-full:first-child{border-top:0}',
+    '.br-gallery{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;padding:4px 2px 10px;margin:0 0 1.2em;-webkit-overflow-scrolling:touch}',
+    '.br-gallery figure{flex:0 0 78%;scroll-snap-align:center;margin:0}',
+    '.br-gallery img{width:100%;border-radius:12px;display:block}',
+    '.br-gallery figcaption{font-size:.8em;color:var(--br-secondary);line-height:1.4;padding-top:6px}',
+    '.br-navbox{border:1px solid var(--br-border,rgba(127,127,127,.25));border-radius:14px;margin:1.6em 0;background:var(--br-card,rgba(127,127,127,.06));font-family:-apple-system,system-ui,sans-serif;overflow:hidden}',
+    '.br-navbox-head{width:100%;appearance:none;border:0;background:rgba(127,127,127,.1);color:var(--br-text);font:600 .92em -apple-system,system-ui,sans-serif;text-align:left;padding:12px 14px;cursor:pointer;display:flex;gap:9px;align-items:center}',
+    '.br-navbox-head .br-navbox-chev{transition:transform .2s;color:var(--br-secondary);font-size:.85em}',
+    '.br-navbox.br-open .br-navbox-chev{transform:rotate(90deg)}',
+    '.br-navbox-body{display:none;padding:6px 14px 12px}',
+    '.br-navbox.br-open .br-navbox-body{display:block}',
+    '.br-navbox-group{font-size:.85em;line-height:1.5;padding:7px 0;border-top:1px solid rgba(127,127,127,.14)}',
+    '.br-navbox-group:first-child{border-top:0}',
+    '.br-navbox-glabel{font-weight:700;margin-right:8px}',
+    '.br-navbox-group a{color:#0A84FF;text-decoration:none;margin-right:10px;white-space:nowrap}',
+    '.br-reflist{font-size:.78em;line-height:1.5;color:var(--br-secondary);padding-left:1.6em}',
+    '.br-reflist li{margin-bottom:.35em;overflow-wrap:break-word}',
+    '.br-tablewrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 0 1.3em;border:1px solid var(--br-border,rgba(127,127,127,.22));border-radius:12px}',
+    '.br-tablewrap table{border-collapse:collapse;width:100%;font-size:.84em;line-height:1.45;margin:0;font-family:-apple-system,system-ui,sans-serif}',
+    '.br-tablewrap th{background:rgba(127,127,127,.14);font-weight:700;text-align:left}',
+    '.br-tablewrap th,.br-tablewrap td{padding:8px 11px;border-bottom:1px solid rgba(127,127,127,.14);vertical-align:top}',
+    '.br-tablewrap tr:last-child td{border-bottom:0}',
+    '.br-body audio{width:100%;margin:.4em 0 1em}',
+    '.br-asec-btn{appearance:none;border:0;background:rgba(127,127,127,.13);color:var(--br-secondary);width:27px;height:27px;border-radius:50%;font-size:14px;line-height:1;cursor:pointer;float:right;margin:2px 0 4px 10px;padding:0;transition:transform .22s}',
+    '.br-asec.br-closed .br-asec-btn{transform:rotate(-90deg)}',
+    '.br-asec-body{display:block}',
+    '.br-asec.br-closed .br-asec-body{display:none}',
     '#br-fnpop{position:fixed;z-index:7;display:none;max-width:min(84vw,340px);background:rgba(30,30,32,.96);color:#F2F2F7;border-radius:14px;',
     'padding:13px 15px;font:400 14px/1.5 -apple-system,system-ui,sans-serif;box-shadow:0 14px 38px rgba(0,0,0,.4);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}',
     '#br-fnpop.br-on{display:block;animation:brpop .18s ease}',
@@ -321,6 +363,14 @@
   var SKIP_TAGS = { SCRIPT: 1, STYLE: 1, NOSCRIPT: 1, NAV: 1, HEADER: 1, FOOTER: 1, ASIDE: 1, FORM: 1, BUTTON: 1, SELECT: 1, TEXTAREA: 1, INPUT: 1, SVG: 1, AUDIO: 1, CANVAS: 1 };
   var SKIP_RE = /(^|[-_\s])(ad|ads|advert|sidebar|comment|share|social|related|promo|newsletter|cookie|popup|modal|menu|nav|breadcrumb|pagination|recommend|read-next|subscribe|signup|sign-up|toolbar|widget|consent|onetrust|trustarc|sourcepoint|gdpr|ccpa)s?([-_\s]|$)/i;
 
+  // Wikimedia wikis get first-class treatment (v1.20.0): their
+  // markup conventions (infobox, hatnotes, reflist, navbox,
+  // JSON-LD headline = short description) are stable enough
+  // to build on. MediaWiki skins on other hosts are caught at
+  // extraction time via #mw-content-text (see extractArticle).
+  var WIKI_HOST = false;
+  try { WIKI_HOST = /(^|\.)(wikipedia|wiktionary|wikibooks|wikivoyage|wikinews|wikiquote|wikisource|wikiversity|wikimedia|wikidata)\.org$/i.test(location.hostname || ''); } catch (e) {}
+
   function meta(doc, names) {
     for (var i = 0; i < names.length; i++) {
       var m = doc.querySelector('meta[property="' + names[i] + '"], meta[name="' + names[i] + '"]');
@@ -349,6 +399,13 @@
     var cls = (node.getAttribute && (node.getAttribute('class') || '')) + ' ' + (node.id || '');
     if (SKIP_RE.test(cls)) return true;
     if (node.getAttribute && node.getAttribute('aria-hidden') === 'true') return true;
+    // A site's own table-of-contents container: the reader
+    // builds its own TOC from the headings, so the in-page
+    // one is always duplication (Wikipedia's #toc list used
+    // to land in the body as a stray list block).
+    if (node.id === 'toc') return true;
+    if (WIKI_HOST && node.classList && node.classList.contains('toc')) return true;
+    if (WIKI_HOST && node.classList && node.classList.contains('printfooter')) return true;
     var style = (node.getAttribute && node.getAttribute('style')) || '';
     if (/display\s*:\s*none|visibility\s*:\s*hidden/i.test(style)) return true;
     var role = node.getAttribute && node.getAttribute('role');
@@ -410,7 +467,12 @@
                 var tgt = null;
                 try { tgt = c.ownerDocument.getElementById(rawHref.slice(1)); } catch (e) {}
                 if (tgt) {
-                  var noteTxt = cleanText(tgt.textContent).replace(/[↩↑]\s*/g, '').trim();
+                  // Skip-aware text: a raw textContent scoops
+                  // <style>/<script> contents into the note —
+                  // Wikipedia's reflist carries a citation CSS
+                  // block, so chips opened with raw CSS as
+                  // their "note" (v1.20.0 fix).
+                  var noteTxt = cleanText(textOfExcludingSkips(tgt)).replace(/[↩↑]\s*/g, '').replace(/^\^\s*/, '').trim();
                   if (noteTxt.length >= 10) {
                     out.push('<sup class="br-fnref" data-note="' + escapeHtmlAttr(noteTxt.slice(0, 600)) + '">' + escapeHtmlText(txt) + '</sup>');
                     fnHandled = true;
@@ -626,6 +688,100 @@
     return '';
   }
 
+  // A Wikipedia infobox as structured data: title, hero
+  // image, and label/value rows — rendered as a card
+  // (v1.20.0). Returns null when there's nothing worth
+  // carding, so the caller can fall back to a plain table.
+  function infoboxBlock(table, baseUrl) {
+    var title = '';
+    var cap = table.querySelector('caption');
+    if (cap) title = cleanText(textOfExcludingSkips(cap));
+    var image = '', imageCaption = '';
+    var imgEl = table.querySelector('.infobox-image img') || table.querySelector('img');
+    if (imgEl) {
+      image = C.sanitizeUrl(imgEl.getAttribute('data-src') || imgEl.getAttribute('src') || '', baseUrl);
+      var icap = table.querySelector('.infobox-caption');
+      if (icap) imageCaption = cleanText(textOfExcludingSkips(icap));
+    }
+    var rows = [];
+    var trs = table.querySelectorAll('tr');
+    for (var r = 0; r < trs.length; r++) {
+      var th = trs[r].querySelector('th'), td = trs[r].querySelector('td');
+      var thT = th ? cleanText(textOfExcludingSkips(th)) : '';
+      if (td) {
+        var tdT = cleanText(textOfExcludingSkips(td));
+        var tdImg = td.querySelector('img');
+        if (th && thT && tdT) { if (thT !== title) rows.push({ label: thT, value: tdT }); }
+        else if (tdImg && !tdT) {
+          var isrc = C.sanitizeUrl(tdImg.getAttribute('data-src') || tdImg.getAttribute('src') || '', baseUrl);
+          if (isrc && isrc !== image) rows.push({ image: isrc });
+        } else if (tdT && tdT !== title) rows.push({ full: tdT });
+      } else if (th && thT) {
+        if (!title) title = thT;
+        else if (thT !== title) rows.push({ header: thT });
+      }
+    }
+    if (!rows.length && !image) return null;
+    return { type: 'infobox', title: title, image: image, imageCaption: imageCaption, rows: rows };
+  }
+
+  // A Wikipedia navbox as structured data: a title plus
+  // labelled groups of links — rendered as ONE collapsed
+  // "browse related" card at its natural place (the end
+  // of the article) instead of a sprawling table (v1.20.0).
+  function navboxBlock(node, baseUrl) {
+    var title = '';
+    var tEl = node.querySelector('.navbox-title, caption, .navbox-abovebelow');
+    if (tEl) title = cleanText(textOfExcludingSkips(tEl));
+    var groups = [];
+    var trs = node.querySelectorAll('tr');
+    for (var r = 0; r < trs.length; r++) {
+      var th = trs[r].querySelector('th');
+      var td = trs[r].querySelector('td');
+      if (!td) continue;
+      var label = th ? cleanText(textOfExcludingSkips(th)) : '';
+      if (label && title && label === title) continue;
+      var links = [], seenL = {};
+      var as = td.querySelectorAll('a[href]');
+      for (var ai = 0; ai < as.length; ai++) {
+        var lt = cleanText(as[ai].textContent);
+        var lh = C.sanitizeUrl(as[ai].getAttribute('href') || '', baseUrl);
+        if (!lt || !lh || seenL[lh]) continue;
+        seenL[lh] = 1;
+        links.push({ text: lt, href: lh });
+      }
+      if (links.length) groups.push({ label: label, links: links });
+    }
+    if (!groups.length) return null;
+    return { type: 'navbox', title: title || 'Related topics', groups: groups };
+  }
+
+  // A <video>/<audio> element as a block, or null when it
+  // has no playable source. Multi-source elements pick the
+  // most playable file (mp4 > webm > ogv) rather than the
+  // first listed — Wikipedia serves webm/ogv first.
+  function mediaBlock(mediaEl, baseUrl) {
+    var isAudio = mediaEl.tagName === 'AUDIO';
+    var src = mediaEl.currentSrc || mediaEl.getAttribute('src') || '';
+    if (!src) {
+      var sources = mediaEl.querySelectorAll('source'), best = '', bestScore = -1;
+      for (var si = 0; si < sources.length; si++) {
+        var ss = sources[si].getAttribute('src') || '';
+        if (!ss) continue;
+        var sty = (sources[si].getAttribute('type') || '') + ' ' + ss;
+        var sc = /mp4/i.test(sty) ? 3 : /webm/i.test(sty) ? 2 : /ogg|ogv/i.test(sty) ? 1 : 0;
+        if (sc > bestScore) { bestScore = sc; best = ss; }
+      }
+      src = best;
+    }
+    var abs = src && !/^blob:/i.test(src) ? C.sanitizeUrl(src, baseUrl) : '';
+    var poster = isAudio ? '' : C.sanitizeUrl(mediaEl.getAttribute('poster') || '', baseUrl);
+    if (!abs && !poster) return null;
+    var block = { type: 'video', src: abs, poster: poster };
+    if (isAudio) block.audio = true;
+    return { key: (isAudio ? 'aud:' : 'vid:') + (abs || poster), block: block };
+  }
+
   function walkBlocks(node, blocks, seen, baseUrl, titleText, rescue) {
     var children = node.childNodes;
     // Loose-text accumulation (see looseRuns): direct text and
@@ -658,6 +814,45 @@
         continue;
       }
       if (shouldSkip(child) && !(rescue && !isHiddenSignal(child) && !visuallyHidden(child) && articleLikeContainer(child))) { flushLoose(); continue; }
+      // Wikipedia furniture with real content (v1.20.0): these
+      // classes are MediaWiki conventions, and each maps to a
+      // dedicated block type instead of the generic handling —
+      // a hatnote is not a paragraph, a gallery is not a list,
+      // a navbox is not a data table.
+      if (child.classList && child.classList.contains('hatnote')) {
+        flushLoose();
+        var hnT = cleanText(textOfExcludingSkips(child));
+        if (hnT) {
+          var hnB = { type: 'hatnote', text: hnT };
+          var hnH = inlineHtml(child, baseUrl);
+          if (hnH.hasLink || hnH.hasRich) hnB.html = hnH.html;
+          pushTextBlock(blocks, seen, hnB);
+        }
+        continue;
+      }
+      if (child.classList && child.classList.contains('gallery')) {
+        flushLoose();
+        var gImgs = [], gSeen = {};
+        var gAll = child.querySelectorAll('img');
+        for (var gi = 0; gi < gAll.length; gi++) {
+          var gSrc = C.sanitizeUrl(gAll[gi].getAttribute('data-src') || gAll[gi].getAttribute('data-original') || gAll[gi].getAttribute('src') || '', baseUrl);
+          if (!gSrc || gSeen[gSrc]) continue;
+          gSeen[gSrc] = 1;
+          var gBox = gAll[gi].closest ? (gAll[gi].closest('li') || gAll[gi].closest('figure') || gAll[gi].closest('.gallerybox')) : null;
+          var gCap = '';
+          if (gBox) { var gCapEl = gBox.querySelector('.gallerytext, figcaption'); if (gCapEl) gCap = cleanText(textOfExcludingSkips(gCapEl)); }
+          gImgs.push({ src: gSrc, caption: gCap });
+        }
+        if (gImgs.length >= 2) { blocks.push({ type: 'gallery', images: gImgs }); continue; }
+        if (gImgs.length === 1) { pushImage(gAll[0], blocks, baseUrl, gImgs[0].caption); continue; }
+        continue;
+      }
+      if (child.classList && child.classList.contains('navbox')) {
+        flushLoose();
+        var nbB = navboxBlock(child, baseUrl);
+        if (nbB) blocks.push(nbB);
+        continue;
+      }
       // A caption element trailing its image under the same
       // wrapper (not a <figcaption>): attach it to the image
       // block it follows instead of emitting it as stray text.
@@ -671,7 +866,7 @@
       if (INLINE_TAGS[ctag]) {
         // An inline wrapper around media is structure, not
         // text: walk it so the image inside still lands.
-        if (child.querySelector && child.querySelector('img, picture, video, iframe')) {
+        if (child.querySelector && child.querySelector('img, picture, video, iframe, audio')) {
           flushLoose();
           walkBlocks(child, blocks, seen, baseUrl, titleText, rescue);
         } else { loose.push(child); brRun = 0; }
@@ -690,6 +885,15 @@
       } else if (tag === 'p') {
         var imgs = child.querySelectorAll('img');
         for (var k = 0; k < imgs.length; k++) pushImage(imgs[k], blocks, baseUrl, '');
+        // Media riding inside a paragraph (a pronunciation
+        // clip, a listen template): the paragraph branch
+        // consumes the whole <p>, so harvest playable
+        // elements explicitly or they vanish with it.
+        var pMedia = child.querySelectorAll('video, audio');
+        for (var pm = 0; pm < pMedia.length; pm++) {
+          var pmB = mediaBlock(pMedia[pm], baseUrl);
+          if (pmB && !seen[pmB.key]) { seen[pmB.key] = 1; blocks.push(pmB.block); }
+        }
         var pt = cleanText(textOfExcludingSkips(child));
         if (pt.length >= 2) {
           var pb = { type: 'paragraph', text: pt };
@@ -734,15 +938,16 @@
         if (items.length) {
           var lb = { type: 'list', ordered: tag === 'ol', items: items };
           if (anyHtml) lb.itemsHtml = itemsHtml;
+          // A reference list renders compact (v1.20.0): the
+          // citation chips carry the notes inline, so the
+          // end list is reference matter, not body text.
+          if (child.classList && (child.classList.contains('references') || child.classList.contains('reflist'))) lb.references = true;
+          else if (child.parentElement && child.parentElement.classList && child.parentElement.classList.contains('reflist')) lb.references = true;
           blocks.push(lb);
         }
-      } else if (tag === 'video') {
-        var vsrc = child.currentSrc || child.getAttribute('src') || '';
-        if (!vsrc) { var so = child.querySelector('source'); if (so) vsrc = so.getAttribute('src') || ''; }
-        var vabs = vsrc && !/^blob:/i.test(vsrc) ? C.sanitizeUrl(vsrc, baseUrl) : '';
-        var vposter = C.sanitizeUrl(child.getAttribute('poster') || '', baseUrl);
-        var vkey = 'vid:' + (vabs || vposter);
-        if ((vabs || vposter) && !seen[vkey]) { seen[vkey] = 1; blocks.push({ type: 'video', src: vabs, poster: vposter }); }
+      } else if (tag === 'video' || tag === 'audio') {
+        var mB = mediaBlock(child, baseUrl);
+        if (mB && !seen[mB.key]) { seen[mB.key] = 1; blocks.push(mB.block); }
       } else if (tag === 'iframe') {
         var isrc = C.sanitizeUrl(child.getAttribute('src') || '', baseUrl);
         var isoc = isrc ? C.socialFromUrl(isrc) : null;
@@ -760,6 +965,10 @@
         var code = String(child.textContent || '').replace(/\s+$/, '');
         if (code.trim()) blocks.push({ type: 'code', text: code });
       } else if (tag === 'table') {
+        if (child.classList && child.classList.contains('infobox')) {
+          var ibB = infoboxBlock(child, baseUrl);
+          if (ibB) { blocks.push(ibB); continue; }
+        }
         var capEl = child.querySelector('caption');
         if (capEl) { var capt = cleanText(capEl.textContent); if (capt) blocks.push({ type: 'tablecaption', text: capt }); }
         var rows = [];
@@ -767,7 +976,7 @@
         for (var r = 0; r < trs.length; r++) {
           var cells = [];
           var tds = trs[r].querySelectorAll('th, td');
-          for (var cc = 0; cc < tds.length; cc++) cells.push(cleanText(tds[cc].textContent));
+          for (var cc = 0; cc < tds.length; cc++) cells.push(cleanText(textOfExcludingSkips(tds[cc])));
           if (cells.length) rows.push(cells);
         }
         if (rows.length) blocks.push({ type: 'table', rows: rows });
@@ -877,6 +1086,7 @@
 
   function extractArticle(doc, baseUrl, force) {
     var ld = parseJsonLd(doc);
+    var isWiki = WIKI_HOST || !!doc.querySelector('#mw-content-text');
     var title = '';
     var byline = cleanText(ld.byline || meta(doc, ['author', 'article:author']) || '');
     if (!byline) {
@@ -931,7 +1141,13 @@
     // the reader never sees on the page (WSJ does this routinely).
     var h1el = best.querySelector('h1') || doc.querySelector('h1');
     var visibleTitle = h1el ? cleanText(textOfExcludingSkips(h1el)) : '';
-    if (visibleTitle.length >= 15 && visibleTitle.length <= 220) title = visibleTitle;
+    // The length floor used to be 15, which rejected real
+    // short titles ("Stop Cop City" is 13) and fell back to
+    // metadata — on Wikipedia the JSON-LD "headline" is the
+    // short DESCRIPTION, so the reader's title became
+    // "American social movement". The page's own h1 is the
+    // title; 4 chars is floor enough.
+    if (visibleTitle.length >= 4 && visibleTitle.length <= 220) title = visibleTitle;
     if (!title) title = cleanText(ld.title || meta(doc, ['og:title', 'twitter:title']) || '');
     if (!title) title = cleanText(doc.title || '').split(/\s+[|\-–—]\s+/)[0];
 
@@ -965,7 +1181,7 @@
     }
     // Cleanup: the header (title + byline + date) is rendered separately, so
     // byline fragments and site junk must not repeat inside the body.
-    var JUNK_RE = /what to read next|read next|recommended for you|more from|sign up for|newsletter|djreprints|this copy is for your personal|all rights reserved|advertisement|daily email digest|your homepage feed|posts from this topic/i;
+    var JUNK_RE = /what to read next|read next|recommended for you|more from|sign up for|newsletter|djreprints|this copy is for your personal|all rights reserved|advertisement|daily email digest|your homepage feed|posts from this topic|retrieved from/i;
     blocks = blocks.filter(function (b) {
       var t = b.type === 'list' ? (b.items || []).join(' ') : (b.text || '');
       if ((b.type === 'paragraph' || b.type === 'heading' || b.type === 'quote') &&
@@ -1026,6 +1242,20 @@
     var description = ld.description || meta(doc, ['og:description', 'description', 'twitter:description']) || '';
     var subRes = C.pickSubtitle(blocks, { description: description, title: title });
     blocks = subRes.blocks;
+    // Wikipedia: the JSON-LD "headline" is the article's
+    // short description (its Wikidata tagline), not a
+    // headline at all — when the visible h1 supplied the
+    // title, that text is exactly the subtitle. Fall back
+    // to the skin's own short-description element when
+    // the structured data lacks one.
+    var wikiSubtitle = '';
+    if (isWiki) {
+      if (ld.title && title && ld.title !== title && ld.title.length <= 160) wikiSubtitle = cleanText(ld.title);
+      if (!wikiSubtitle) {
+        var sdEl = doc.querySelector('.shortdescription, #tagline, .tagline');
+        if (sdEl) { var sdT = cleanText(textOfExcludingSkips(sdEl)); if (sdT && sdT !== title && sdT.length <= 160) wikiSubtitle = sdT; }
+      }
+    }
     if (byline) {
       var byLow = byline.toLowerCase();
       blocks = blocks.filter(function (b) {
@@ -1084,10 +1314,10 @@
       if (ld.articleBody && ld.articleBody.length > stats.textLength + 800 && ld.articleBody.length > stats.textLength * 1.8) gated = true;
     } catch (e) {}
     return {
-      title: title || 'Untitled', subtitle: subRes.subtitle || '', byline: byline, date: date,
+      title: title || 'Untitled', subtitle: wikiSubtitle || subRes.subtitle || '', byline: byline, date: date,
       site: C.hostOf(baseUrl), url: baseUrl, hero: hero, heroVideo: heroVideo, favicon: favicon,
       blocks: blocks, stats: stats, wordCount: words,
-      readable: C.isReadable(stats), gated: gated,
+      readable: C.isReadable(stats), gated: gated, wiki: isWiki,
       ldBodyLength: ld.articleBody ? ld.articleBody.length : 0
     };
   }
@@ -1279,6 +1509,16 @@
       var fn = ev.target && ev.target.closest ? ev.target.closest('.br-fnref') : null;
       if (fn) { showFootnote(fn); return; }
       hideFootnote();
+      // Navbox card: its header button expands/collapses
+      // the link groups (v1.20.0).
+      var nbh = ev.target && ev.target.closest ? ev.target.closest('.br-navbox-head') : null;
+      if (nbh) { var nbx2 = nbh.closest('.br-navbox'); if (nbx2) nbx2.classList.toggle('br-open'); return; }
+      // Collapsible sections: tapping a section heading
+      // (or its chevron) folds everything under it until
+      // the next same-level heading (v1.20.0). Link taps
+      // inside a heading were already handled above.
+      var secH = ev.target && ev.target.closest ? ev.target.closest('.br-asec > h1, .br-asec > h2, .br-asec > h3, .br-asec > h4, .br-asec > h5, .br-asec > h6') : null;
+      if (secH && secH.parentElement) { toggleSection(secH.parentElement); return; }
       if (ev.target && ev.target.tagName === 'MARK') openHighlightMenu(ev.target);
       else if (ev.target && ev.target.tagName === 'IMG') openViewer(ev.target);
     });
@@ -1315,6 +1555,7 @@
     if (!S.reader) return;
     var e = eff(), t = theme();
     var r = S.reader;
+    r.classList.toggle('br-nocites', !!e.hideCitations);
     r.style.setProperty('--br-bg', t.bg);
     r.style.setProperty('--br-surface', t.surface);
     r.style.setProperty('--br-text', t.text);
@@ -1366,6 +1607,18 @@
 
   function renderBlocksInto(container, blocks, headingRegistry, byline) {
     var textOnly = !!eff().textOnly;
+    // Collapsible sections (v1.20.0): each heading opens a
+    // .br-asec wrapper holding the heading and a .br-asec-body
+    // with everything up to the next same-or-higher heading;
+    // deeper headings nest inside. Folding a section is a
+    // class on the wrapper — the heading itself always stays
+    // visible. State lives in S.collapsedSecs (per article,
+    // persisted with reading progress).
+    var secStack = [], secCount = 0;
+    function insertInto(node) {
+      var host = secStack.length ? secStack[secStack.length - 1].body : container;
+      host.appendChild(node);
+    }
     blocks.forEach(function (b, bi) {
       if (textOnly && (b.type === 'image' || b.type === 'video' || b.type === 'embed' || b.type === 'social')) return;
       var n = null;
@@ -1384,6 +1637,11 @@
         if (!container.__brFirstP && b.text.length >= 40 && !C.isBylineFragment(b.text, byline)) {
           container.__brFirstP = 1; n.classList.add('br-firstp');
         }
+      }
+      else if (b.type === 'video' && b.audio) {
+        var au = el('audio');
+        au.src = b.src; au.controls = true; au.preload = 'metadata';
+        n = au;
       }
       else if (b.type === 'video') {
         var vfig = el('figure');
@@ -1460,6 +1718,7 @@
         n = sw;
       } else if (b.type === 'list') {
         n = el(b.ordered ? 'ol' : 'ul');
+        if (b.references) n.classList.add('br-reflist');
         (b.items || []).forEach(function (it, idx) {
           var li = el('li', '', it);
           var ih = b.itemsHtml && b.itemsHtml[idx];
@@ -1468,17 +1727,107 @@
         });
       } else if (b.type === 'code') { n = el('pre', '', b.text); }
       else if (b.type === 'tablecaption') { n = el('div', 'br-tablecap', b.text); }
+      else if (b.type === 'hatnote') {
+        n = el('div', 'br-hatnote');
+        if (b.html) n.innerHTML = b.html; else n.textContent = b.text || '';
+      }
+      else if (b.type === 'infobox') {
+        var ibx = el('div', 'br-infobox');
+        if (b.title) ibx.appendChild(el('div', 'br-infobox-title', b.title));
+        if (b.image) {
+          var ibFig = el('figure');
+          var ibImg = el('img'); ibImg.src = b.image; ibImg.alt = ''; ibImg.loading = 'lazy';
+          ibImg.setAttribute('data-caption', b.imageCaption || '');
+          ibFig.appendChild(ibImg);
+          if (b.imageCaption) ibFig.appendChild(el('figcaption', '', b.imageCaption));
+          ibx.appendChild(ibFig);
+        }
+        var ibRows = el('div', 'br-infobox-rows');
+        (b.rows || []).forEach(function (row) {
+          if (row.label) {
+            var ibR = el('div', 'br-ib-row');
+            ibR.appendChild(el('span', 'br-ib-label', row.label));
+            ibR.appendChild(el('span', 'br-ib-value', row.value));
+            ibRows.appendChild(ibR);
+          } else if (row.header) {
+            ibRows.appendChild(el('div', 'br-infobox-title', row.header));
+          } else if (row.image) {
+            var ibIm2 = el('img'); ibIm2.src = row.image; ibIm2.alt = ''; ibIm2.loading = 'lazy';
+            ibIm2.style.width = '100%'; ibIm2.style.display = 'block';
+            ibRows.appendChild(ibIm2);
+          } else if (row.full) {
+            ibRows.appendChild(el('div', 'br-ib-full', row.full));
+          }
+        });
+        ibx.appendChild(ibRows);
+        n = ibx;
+      }
+      else if (b.type === 'gallery') {
+        var gal = el('div', 'br-gallery');
+        (b.images || []).forEach(function (gim) {
+          var gFig = el('figure');
+          var gImg = el('img'); gImg.src = gim.src; gImg.alt = ''; gImg.loading = 'lazy';
+          gImg.setAttribute('data-caption', gim.caption || '');
+          gFig.appendChild(gImg);
+          if (gim.caption) gFig.appendChild(el('figcaption', '', gim.caption));
+          gal.appendChild(gFig);
+        });
+        n = gal;
+      }
+      else if (b.type === 'navbox') {
+        var nbx = el('div', 'br-navbox');
+        var nbHead = el('button', 'br-navbox-head');
+        nbHead.appendChild(el('span', 'br-navbox-chev', '▸'));
+        nbHead.appendChild(el('span', '', 'Browse related · ' + (b.title || 'Related topics')));
+        nbx.appendChild(nbHead);
+        var nbBody = el('div', 'br-navbox-body');
+        (b.groups || []).forEach(function (grp) {
+          var gRow = el('div', 'br-navbox-group');
+          if (grp.label) gRow.appendChild(el('span', 'br-navbox-glabel', grp.label));
+          (grp.links || []).forEach(function (lk) {
+            var lka = el('a', '', lk.text);
+            lka.href = lk.href; lka.target = '_blank'; lka.rel = 'noopener noreferrer';
+            gRow.appendChild(lka);
+          });
+          nbBody.appendChild(gRow);
+        });
+        nbx.appendChild(nbBody);
+        n = nbx;
+      }
       else if (b.type === 'table') {
-        n = el('table');
+        var twrap = el('div', 'br-tablewrap');
+        var tblEl = el('table');
         (b.rows || []).forEach(function (row, ri) {
           var tr = el('tr');
           row.forEach(function (cell) { tr.appendChild(el(ri === 0 ? 'th' : 'td', '', cell)); });
-          n.appendChild(tr);
+          tblEl.appendChild(tr);
         });
+        twrap.appendChild(tblEl);
+        n = twrap;
       } else if (b.type === 'pagebreak') {
         n = el('div', 'br-pagebreak', 'Page ' + (b.page || ''));
       } else if (b.type === 'hr') { n = el('hr'); }
-      if (n) { n.setAttribute('data-bi', bi); container.appendChild(n); }
+      if (n) {
+        n.setAttribute('data-bi', bi);
+        if (b.type === 'heading') {
+          var hLvl = b.level || 2;
+          while (secStack.length && secStack[secStack.length - 1].level >= hLvl) secStack.pop();
+          var secWrap = el('div', 'br-asec');
+          var secKey = 's' + secCount++;
+          secWrap.setAttribute('data-sec', secKey);
+          if (S.collapsedSecs && S.collapsedSecs[secKey]) secWrap.classList.add('br-closed');
+          var secBody = el('div', 'br-asec-body');
+          var secBtn = el('button', 'br-asec-btn', '▾');
+          secBtn.setAttribute('aria-label', 'Collapse or expand this section');
+          n.appendChild(secBtn);
+          secWrap.appendChild(n);
+          secWrap.appendChild(secBody);
+          insertInto(secWrap);
+          secStack.push({ level: hLvl, body: secBody, key: secKey });
+        } else {
+          insertInto(n);
+        }
+      }
     });
   }
 
@@ -1643,6 +1992,13 @@
 
   function renderCurrent() {
     var a = viewA();
+    // Collapsed sections for THIS article, restored from
+    // the progress record (v1.20.0). Keys are the section
+    // ordinals renderBlocksInto assigns in heading order
+    // ('s0', 's1', ...), stable for the same content.
+    S.collapsedSecs = {};
+    var prec = (S.progress && a.url) ? S.progress[a.url] : null;
+    if (prec && prec.collapsed) prec.collapsed.forEach(function (k) { S.collapsedSecs[k] = 1; });
     S.content.innerHTML = '';
     S.headings = [];
     var head = el('div'); head.className = 'br-head';
@@ -1824,7 +2180,10 @@
   function insertLateImages(newBlocks) {
     if (!S.articleBody || !S.current) return;
     var rendered = {};
-    var kids = S.articleBody.children;
+    // Blocks now nest inside collapsible section wrappers
+    // (v1.20.0), so the rendered set is every descendant
+    // carrying a data-brk, not just top-level children.
+    var kids = S.articleBody.querySelectorAll('[data-brk]');
     for (var i = 0; i < kids.length; i++) {
       var k = kids[i].getAttribute && kids[i].getAttribute('data-brk');
       if (k) rendered[k] = kids[i];
@@ -1851,7 +2210,11 @@
       }
       var fig = glowFigure(b.src, b.caption, key);
       fig.classList.add('br-img-new');
-      if (anchor) S.articleBody.insertBefore(fig, anchor); else S.articleBody.appendChild(fig);
+      if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(fig, anchor);
+      else {
+        var lastSecBody = S.articleBody.querySelector('.br-asec:last-of-type > .br-asec-body');
+        (lastSecBody || S.articleBody).appendChild(fig);
+      }
       rendered[key] = fig;
       S.current.blocks.push(b);
       requestAnimationFrame(function () {
@@ -2639,10 +3002,58 @@
     });
   }
 
+  // Collapsible sections (v1.20.0): toggle + persistence.
+  // The collapsed set rides in the progress record so it
+  // survives alongside the reading position; saveProgress
+  // preserves it, and saveCollapsed preserves the fraction.
+  function toggleSection(secEl) {
+    if (!secEl) return;
+    var closed = secEl.classList.toggle('br-closed');
+    var key = secEl.getAttribute('data-sec');
+    if (!S.collapsedSecs) S.collapsedSecs = {};
+    if (key) { if (closed) S.collapsedSecs[key] = 1; else delete S.collapsedSecs[key]; }
+    saveCollapsed();
+  }
+  function saveCollapsed() {
+    if (!S.current || !S.current.url) return;
+    var url = S.current.url;
+    var rec = S.progress[url] || { frac: 0, ts: Date.now(), title: S.current.title };
+    var keys = Object.keys(S.collapsedSecs || {});
+    if (keys.length) rec.collapsed = keys; else delete rec.collapsed;
+    rec.ts = Date.now();
+    S.progress[url] = rec;
+    storageSet(K.progress, S.progress);
+  }
+  // Expand every collapsed ancestor of an element (a TOC
+  // jump target inside a folded section is invisible and
+  // reports offsetTop 0 until its chain is open).
+  function expandSectionChain(node) {
+    var anc = node ? node.parentElement : null, changed = false;
+    while (anc && anc !== S.reader) {
+      if (anc.classList && anc.classList.contains('br-asec') && anc.classList.contains('br-closed')) {
+        anc.classList.remove('br-closed');
+        var k = anc.getAttribute('data-sec');
+        if (k && S.collapsedSecs) delete S.collapsedSecs[k];
+        changed = true;
+      }
+      anc = anc.parentElement;
+    }
+    if (changed) saveCollapsed();
+  }
+
   function saveProgress(frac) {
     if (!S.current) return;
-    if (frac < 0.02) delete S.progress[S.current.url];
-    else S.progress[S.current.url] = { frac: Math.round(frac * 1000) / 1000, ts: Date.now(), title: S.current.title };
+    var prevRec = S.progress[S.current.url];
+    if (frac < 0.02) {
+      // Keep the record while it still carries a collapsed
+      // set — scrolling to the top must not forget folds.
+      if (prevRec && prevRec.collapsed) { prevRec.frac = 0; prevRec.ts = Date.now(); }
+      else delete S.progress[S.current.url];
+    } else {
+      var newRec = { frac: Math.round(frac * 1000) / 1000, ts: Date.now(), title: S.current.title };
+      if (prevRec && prevRec.collapsed) newRec.collapsed = prevRec.collapsed;
+      S.progress[S.current.url] = newRec;
+    }
     var keys = Object.keys(S.progress);
     if (keys.length > 60) {
       keys.sort(function (a, b) { return (S.progress[a].ts || 0) - (S.progress[b].ts || 0); });
@@ -2968,6 +3379,7 @@
         b.addEventListener('click', function () {
           closeSheet();
           var target = document.getElementById(h.id);
+          if (target) expandSectionChain(target);
           if (target && S.reader) S.reader.scrollTop = target.offsetTop - 70;
         });
         sheet.appendChild(b);
@@ -3375,6 +3787,7 @@
         writeGlobal({ textOnly: on });
         rerenderKeepScroll();
       });
+      switchRow(secAppearance, 'Hide Citations', !!eff().hideCitations, function (on) { writeGlobal({ hideCitations: on }); });
 
       // Menu bar position (global): bottom by default, or top.
       secLayout.appendChild(el('h4', '', 'Menu Bar'));

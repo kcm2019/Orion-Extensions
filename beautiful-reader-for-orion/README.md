@@ -1,4 +1,64 @@
-# Beautiful Reader for Orion — v1.19.3
+# Beautiful Reader for Orion — v1.20.0
+
+## What's new in v1.20.0
+
+First-class Wikipedia, and collapsible sections
+everywhere. Kurt's picks: Core + A B C D E, with the
+collapsible-headings design as proposed (start
+expanded, tap to fold, folds remembered per article).
+
+Wikipedia mode (auto-detected on Wikimedia hosts
+and any MediaWiki page):
+- Title fixed: the visible-h1 gate dropped from 15
+  to 4 chars — "Stop Cop City" (13) used to fall
+  back to the JSON-LD headline, which on Wikipedia
+  is the short DESCRIPTION, so articles were titled
+  things like "American social movement". That text
+  is now the subtitle, where it belongs.
+- Hatnotes kept as styled note lines; the infobox
+  renders as a card (title, photo, caption,
+  label/value rows, section headers, map images)
+  instead of a raw table with its photos trapped
+  inside; Wikipedia's own TOC list no longer leaks
+  into the body (the reader's TOC covers it);
+  "Retrieved from..." and print-footer junk stripped.
+- Citations: the chips already existed, but their
+  note text was scooped with raw textContent and
+  opened with the reflist's CSS block as the "note"
+  — notes are now skip-aware text. The reference
+  list itself renders compact (.br-reflist).
+- A: galleries become swipeable snap rows with
+  captions. B: audio/video in flow — multi-source
+  elements pick the most playable file (mp4 > webm
+  > ogv), audio (pronunciations) renders as a
+  player, and media riding inside a paragraph is
+  harvested instead of vanishing with it.
+  C: data tables get a styled, sideways-scrolling
+  treatment (header row, striping). D: navboxes
+  become one collapsed "Browse related" card.
+  E: a Hide Citations switch (Aa menu, next to
+  Text Only) hides the [12] chips; the reference
+  list stays.
+
+Collapsible headings (all articles): each heading
+wraps its section in .br-asec; tapping the heading
+or its chevron folds everything under it until the
+next same-level heading (subsections nest). Folds
+persist per article in the progress record
+(saveProgress and saveCollapsed preserve each
+other's fields), and a TOC jump expands the
+target's ancestor chain before scrolling.
+insertLateImages now searches descendants for
+data-brk anchors and inserts within the right
+section, since blocks no longer sit at the top
+level of the article body.
+
+Verified: new suite tests/e2e-v1200.js (26 checks)
+plus a 17-point check against the real Stop Cop
+City HTML (title/subtitle, infobox 12 rows + image,
+134 clean chips, fold + persistence on the rendered
+DOM). Full battery: 36 suites green.
+
 
 ## What's new in v1.19.3
 

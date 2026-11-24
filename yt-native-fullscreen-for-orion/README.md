@@ -55,7 +55,22 @@ Firefox Manifest V2 extension for Orion on iPhone/iPad.
    The Queue page lists the watch page's Up Next entries to tap-add,
    and queued items can be played now, removed (✕), or cleared.
    The queue persists across videos and sessions.
-6. **Auto PiP on Scroll** (v2.4) — scrolling down to the comments
+6. **Live-element transport** (v2.5) — YouTube swaps the <video>
+   element when a new video is picked from the current one (Up
+   Next, end screen, queue jump), which used to leave the overlay
+   talking to a detached element: the pause button went dead.
+   Every control now resolves the live element first, a subtree
+   observer + 1s poll adopt swaps within a second, all transport
+   listeners re-wire on adoption, and the settings UI builds as
+   soon as the player exists — it no longer waits for the caption
+   response, which could lag a navigation and freeze the controls.
+   Also in v2.5: the hide timer re-validates before firing (no
+   more vanishing while paused), the play button shows a replay
+   glyph at the end, live streams show LIVE instead of a broken
+   remaining time, scrubbing shows a time bubble with the target
+   and delta while the bar follows your finger (seeks throttled,
+   exact seek on release), and buttons get press feedback.
+7. **Auto PiP on Scroll** (v2.4) — scrolling down to the comments
    pops the video into Picture in Picture once the player is
    halfway out of view (playing videos only, foreground only; a
    settings-menu toggle turns it off). This is separate from the
@@ -78,7 +93,7 @@ Notes / trade-offs:
 
 ## Install in Orion (iPhone / iPad)
 
-1. Download `yt-native-fullscreen-orion-2.4.0.zip` to your iPhone
+1. Download `yt-native-fullscreen-orion-2.5.0.zip` to your iPhone
    (Files → Downloads). **Don't unzip it.** The `.xpi` is the same
    package. If you installed v1.0/v1.1, remove that version first.
 2. Orion: **Settings → Extensions** → turn **Firefox extensions** on.
@@ -91,7 +106,7 @@ Notes / trade-offs:
    **Settings → Accessibility → Subtitles & Captioning →
    Closed Captions + SDH** is on.
 
-## On-device checks for v2.4.0
+## On-device checks for v2.5.0
 
 1. Open a video and tap it: the centre cluster appears (↺10,
    play/pause, 10↻) plus the glass bottom bar. Tap again to
@@ -128,6 +143,11 @@ Notes / trade-offs:
    past the halfway point it should pop into PiP. Scroll back up,
    close the PiP, scroll down again — it should fire again; but
    closing the PiP while still scrolled down must not re-open it.
+10. **The v2.5 check**: play a video, then tap a different video
+    (Up Next sidebar, end screen, or a queued jump) — on the new
+    video the centre pause button, ±10s skips and scrubber must
+    all work immediately, the times must belong to the new video,
+    and pausing must keep the UI up.
 
 ## Files
 

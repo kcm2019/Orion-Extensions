@@ -1,5 +1,5 @@
 'use strict';
-/* YT Native Fullscreen for Orion v2.4.0 (Firefox MV2)
+/* YT Native Fullscreen for Orion v2.5.0 (Firefox MV2)
  *
  * v1.0: fullscreen a YouTube video -> iOS native player, via
  *   video.webkitEnterFullscreen() called synchronously in the tap.
@@ -890,7 +890,7 @@
     // fullscreen exit or app backgrounding, so background playback
     // is untouched. Because the tap is an explicit request for
     // PiP, YouTube's disablePictureInPicture is lifted for it.
-    var v = CAP.video;
+    var v = syncVideo();
     if (!v) { showToast('No video yet'); return; }
     try {
       if (typeof v.webkitSetPresentationMode !== 'function' ||
@@ -929,7 +929,7 @@
     maybeAutoPipScroll();
   }
   function maybeAutoPipScroll() {
-    var v = CAP.video;
+    var v = syncVideo();
     if (!v || !PREFS.autoPipScroll) return;
     try { if (document.hidden) return; } catch (e) {}
     if (v.paused || v.ended) return;
@@ -996,14 +996,24 @@
   function updateTransport() {
     var v = CAP.video;
     if (!v || !AUI.playBtn) return;
-    AUI.playBtn.textContent = v.paused || v.ended ? '▶︎' : '❙❙';
+    AUI.playBtn.textContent = v.ended ? '↺' : (v.paused ? '▶︎' : '❙❙');
     var dur = v.duration, ct = v.currentTime || 0;
     var frac = (isFinite(dur) && dur > 0) ? Math.min(1, Math.max(0, ct / dur)) : 0;
+    if (!isFinite(dur)) {
+      // Live stream: position inside the seekable window instead.
+      try {
+        if (v.seekable && v.seekable.length) {
+          var s0 = v.seekable.start(0), s1 = v.seekable.end(0);
+          if (s1 > s0) frac = Math.min(1, Math.max(0, (ct - s0) / (s1 - s0)));
+        }
+      } catch (e) {}
+    }
+    if (AUI.scrubbing) return; // the finger owns the bar right now
     if (AUI.scrubFill) AUI.scrubFill.style.width = (frac * 100).toFixed(2) + '%';
     if (AUI.scrubKnob) AUI.scrubKnob.style.left = (frac * 100).toFixed(2) + '%';
     if (AUI.hairFill) AUI.hairFill.style.width = (frac * 100).toFixed(2) + '%';
     if (AUI.tElapsed) AUI.tElapsed.textContent = fmtTime(ct);
-    if (AUI.tRemain) AUI.tRemain.textContent = isFinite(dur) ? '-' + fmtTime(dur - ct) : '';
+    if (AUI.tRemain) AUI.tRemain.textContent = isFinite(dur) ? '-' + fmtTime(dur - ct) : 'LIVE';
   }
 
   function showUI() {
@@ -1040,7 +1050,73 @@
     if (!v || v.paused || v.ended) return; // paused: UI stays up
     var base = Math.max(AUI.shownAt || 0, AUI.lastActivity || 0);
     var delay = Math.max(0, base + MIN_VISIBLE_MS - Date.now());
-    AUI.hideTimer = setTimeout(function () { hideUI(); }, delay);
+    AUI.hideTimer = setTimeout(function () {
+      AUI.hideTimer = null;
+      // Re-validate at fire time: the state that justified hiding
+      // may be gone (video paused meanwhile, panel opened, a scrub
+      // started). Hiding anyway was a real "UI vanished while
+      // paused" path.
+      if (AUI.panelOpen || AUI.scrubbing) return;
+      var vv = CAP.video;
+      if (!vv || vv.paused || vv.ended) return;
+      hideUI();
+    }, delay);
+  }
+
+  /* ---------------- live-element wiring ----------------
+   * THE v2.5 FIX. YouTube swaps the <video> element when a new
+   * video is picked from the current one (Up Next, end screen,
+   * queue jump, ad transitions) — sometimes with no navigation
+   * event at all. Everything used to trust the element captured
+   * at build time: the replacement observer watched the player
+   * with subtree:false while the <video> lives one level deeper
+   * (inside .html5-video-container), so it usually never fired,
+   * CAP.video kept pointing at a detached element, and the
+   * overlay's pause button called pause() on a dead node.
+   * Now: every transport action resolves the LIVE element first
+   * (syncVideo), adoption re-wires all per-element listeners and
+   * resets per-video UI state, and a 1s poll + a subtree
+   * observer guarantee adoption happens even if a swap is
+   * missed by both navigation hooks. */
+  function wireTransport(v) {
+    if (!v || typeof v.addEventListener !== 'function' || v.__ytnfWired) return;
+    v.__ytnfWired = true;
+    wireSpeed(v);
+    wireEnded(v);
+    v.addEventListener('timeupdate', updateTransport);
+    v.addEventListener('play', function () {
+      updateTransport(); AUI.lastActivity = Date.now(); scheduleHide();
+    });
+    v.addEventListener('pause', function () { updateTransport(); showUI(); });
+    v.addEventListener('loadedmetadata', updateTransport);
+    v.addEventListener('seeking', updateTransport);
+    v.addEventListener('ended', function () { updateTransport(); showUI(); });
+  }
+
+  function adoptVideo(v) {
+    if (!v || v === CAP.video) return false;
+    CAP.video = v;
+    wireTransport(v);
+    enforceSpeed();
+    // Per-video UI state: a settings page or panel left open for
+    // the previous video must not linger over the new one.
+    if (AUI.panelOpen) closePanel();
+    AUI.page = 'main';
+    updateTransport();
+    scheduleHide();
+    log('adopted live video element');
+    return true;
+  }
+
+  function syncVideo() {
+    var v = null;
+    try {
+      var p = AUI.player || findPlayer();
+      if (p && p.querySelector) v = p.querySelector('video.html5-main-video, video');
+    } catch (e) {}
+    if (!v) v = findVideo();
+    if (v) adoptVideo(v);
+    return CAP.video;
   }
 
   /* ---------------- queue (Kurt's locked rule, Nov 5) ----------------
@@ -1413,18 +1489,38 @@
   }
 
   /* ---------------- scrubbing (Apple-style drag) ---------------- */
-  function scrubTo(clientX) {
-    var v = CAP.video;
+  function scrubTo(clientX, final) {
+    var v = syncVideo();
     if (!v || !AUI.scrub) return;
     var rect = null;
     try { rect = AUI.scrub.getBoundingClientRect(); } catch (e) {}
     if (!rect || !rect.width) return;
-    var frac = (clientX - rect.left) / rect.width;
-    frac = Math.min(1, Math.max(0, frac));
-    if (isFinite(v.duration) && v.duration > 0) {
-      try { v.currentTime = frac * v.duration; } catch (e) {}
+    AUI.scrubX = clientX;
+    var frac = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    if (!isFinite(v.duration) || v.duration <= 0) return;
+    var target = frac * v.duration;
+    // The bar follows the finger immediately (optimistic readout);
+    // the actual seek is throttled to ~90ms during the drag so a
+    // long swipe doesn't fire hundreds of seeks, with one exact
+    // final seek on release.
+    if (AUI.scrubFill) AUI.scrubFill.style.width = (frac * 100).toFixed(2) + '%';
+    if (AUI.scrubKnob) AUI.scrubKnob.style.left = (frac * 100).toFixed(2) + '%';
+    if (AUI.hairFill) AUI.hairFill.style.width = (frac * 100).toFixed(2) + '%';
+    if (AUI.tElapsed) AUI.tElapsed.textContent = fmtTime(target);
+    if (AUI.tRemain) AUI.tRemain.textContent = '-' + fmtTime(v.duration - target);
+    if (AUI.scrubBubble) {
+      var delta = target - (v.currentTime || 0);
+      AUI.scrubBubble.textContent = fmtTime(target) +
+        (delta >= 1 ? '  (+' + fmtTime(delta) + ')' :
+          delta <= -1 ? '  (-' + fmtTime(-delta) + ')' : '');
+      AUI.scrubBubble.style.left =
+        Math.min(rect.width - 36, Math.max(36, frac * rect.width)) + 'px';
     }
-    updateTransport();
+    var now = Date.now();
+    if (final || !AUI.lastSeekAt || now - AUI.lastSeekAt >= 90) {
+      AUI.lastSeekAt = now;
+      try { v.currentTime = target; } catch (e) {}
+    }
   }
 
   /* ---------------- compact layout (miniplayer) ----------------
@@ -1514,19 +1610,19 @@
       fwdBtn.title = 'Forward 10 seconds';
       backBtn.addEventListener('click', function (e) {
         try { e.stopPropagation(); } catch (err) {}
-        var v = CAP.video; if (!v) return;
+        var v = syncVideo(); if (!v) return;
         try { v.currentTime = Math.max(0, (v.currentTime || 0) - 10); } catch (err) {}
         updateTransport(); showUI();
       });
       playBtn.addEventListener('click', function (e) {
         try { e.stopPropagation(); } catch (err) {}
-        var v = CAP.video; if (!v) return;
+        var v = syncVideo(); if (!v) return;
         try { if (v.paused || v.ended) v.play(); else v.pause(); } catch (err) {}
         updateTransport(); showUI();
       });
       fwdBtn.addEventListener('click', function (e) {
         try { e.stopPropagation(); } catch (err) {}
-        var v = CAP.video; if (!v) return;
+        var v = syncVideo(); if (!v) return;
         try {
           var d = isFinite(v.duration) ? v.duration : (v.currentTime || 0) + 10;
           v.currentTime = Math.min(d, (v.currentTime || 0) + 10);
@@ -1558,6 +1654,12 @@
       knob.style.cssText = 'position:absolute;top:50%;left:0%;width:15px;height:15px;border-radius:50%;' +
         'background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.55);transform:translate(-50%,-50%);';
       scrub.appendChild(track); scrub.appendChild(knob);
+      var bubble = document.createElement('div');
+      bubble.style.cssText = GLASS + FONT +
+        'position:absolute;bottom:54px;left:36px;transform:translateX(-50%);' +
+        'padding:5px 11px;border-radius:999px;font-size:12.5px;font-weight:600;' +
+        'font-variant-numeric:tabular-nums;white-space:nowrap;display:none;';
+      scrub.appendChild(bubble);
       var tRemain = document.createElement('span');
       tRemain.style.cssText = 'font-size:13px;font-weight:500;font-variant-numeric:tabular-nums;min-width:46px;color:rgba(255,255,255,.85);';
       var gearBtn = circleBtn(44, 19, '');
@@ -1631,34 +1733,57 @@
 
       root.addEventListener('click', function (e) { try { e.stopPropagation(); } catch (err) {} });
 
-      /* scrub wiring: pointerdown on the track, move/up on document */
+      /* scrub wiring: pointerdown on the track, move/up on document.
+         The document handlers register ONCE (they read AUI state at
+         event time) — re-registering on every rebuild stacked
+         duplicate handlers across navigations. */
       scrub.addEventListener('pointerdown', function (e) {
         try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
-        var v = CAP.video; if (!v) return;
+        var v = syncVideo(); if (!v) return;
+        try { if (e.pointerId != null && scrub.setPointerCapture) scrub.setPointerCapture(e.pointerId); } catch (err) {}
         AUI.scrubbing = true;
         AUI.wasPlaying = !v.paused && !v.ended;
         if (AUI.wasPlaying) { try { v.pause(); } catch (err) {} }
         knob.style.transform = 'translate(-50%,-50%) scale(1.35)';
+        if (AUI.scrubBubble) AUI.scrubBubble.style.display = 'block';
         scrubTo(e.clientX);
         showUI();
       });
-      document.addEventListener('pointermove', function (e) {
-        if (AUI.scrubbing) scrubTo(e.clientX);
-      });
-      document.addEventListener('pointerup', function () {
-        if (!AUI.scrubbing) return;
-        AUI.scrubbing = false;
-        knob.style.transform = 'translate(-50%,-50%)';
-        var v = CAP.video;
-        if (v && AUI.wasPlaying) { try { v.play(); } catch (err) {} }
-        AUI.wasPlaying = false;
-        AUI.lastActivity = Date.now();
-        scheduleHide();
-      });
+      if (!scrubDocWired) {
+        scrubDocWired = true;
+        document.addEventListener('pointermove', function (e) {
+          if (AUI.scrubbing) scrubTo(e.clientX);
+        });
+        document.addEventListener('pointerup', function () {
+          if (!AUI.scrubbing) return;
+          AUI.scrubbing = false;
+          if (AUI.scrubKnob) AUI.scrubKnob.style.transform = 'translate(-50%,-50%)';
+          if (AUI.scrubBubble) AUI.scrubBubble.style.display = 'none';
+          if (AUI.scrubX != null) scrubTo(AUI.scrubX, true); // exact final seek
+          var v = syncVideo();
+          if (v && AUI.wasPlaying) { try { v.play(); } catch (err) {} }
+          AUI.wasPlaying = false;
+          AUI.lastActivity = Date.now();
+          updateTransport();
+          scheduleHide();
+        });
+        document.addEventListener('pointercancel', function () {
+          if (!AUI.scrubbing) return;
+          AUI.scrubbing = false;
+          if (AUI.scrubKnob) AUI.scrubKnob.style.transform = 'translate(-50%,-50%)';
+          if (AUI.scrubBubble) AUI.scrubBubble.style.display = 'none';
+          var v = syncVideo();
+          if (v && AUI.wasPlaying) { try { v.play(); } catch (err) {} }
+          AUI.wasPlaying = false;
+          updateTransport();
+          scheduleHide();
+        });
+      }
 
       /* tap on the video toggles our chrome (YouTube still handles
          play/pause on the same tap) */
-      if (typeof player.addEventListener === 'function') {
+      if (typeof player.addEventListener === 'function' && !player.__ytnfUiWired) {
+        player.__ytnfUiWired = true;
         player.addEventListener('click', function (e) {
           if (e && e.__ytnfTap) return; // capture-phase tap already handled it
           var t = e && e.target;
@@ -1668,27 +1793,23 @@
         player.addEventListener('mousemove', function () { if (!AUI.visible) showUI(); });
       }
       var vid = CAP.video;
-      if (vid && typeof vid.addEventListener === 'function') {
-        vid.addEventListener('timeupdate', updateTransport);
-        vid.addEventListener('play', function () { updateTransport(); AUI.lastActivity = Date.now(); scheduleHide(); });
-        vid.addEventListener('pause', function () { updateTransport(); showUI(); });
-        vid.addEventListener('loadedmetadata', updateTransport);
-        wireEnded(vid);
-      }
+      if (vid) wireTransport(vid);
 
       AUI.root = root; AUI.center = center; AUI.bottom = bottom; AUI.panel = panel;
       AUI.playBtn = playBtn; AUI.backBtn = backBtn; AUI.fwdBtn = fwdBtn;
       AUI.gearBtn = gearBtn; AUI.fsBtn = fsBtn; AUI.miniBtn = miniBtn; AUI.pipBtn = pipBtn;
       AUI.scrub = scrub; AUI.scrubFill = fill; AUI.scrubKnob = knob; AUI.hairFill = hairFill;
+      AUI.scrubBubble = bubble;
       AUI.tElapsed = tElapsed; AUI.tRemain = tRemain;
       AUI.visible = false;
       AUI.shownAt = 0; AUI.lastActivity = 0;
       try { window.__ytnfAUI = AUI; } catch (e) {}
       AUI.refreshLayout = refreshLayout;
+      AUI.syncVideo = syncVideo;
       wireScrollPip(player);
       if (!layoutPollStarted && typeof setInterval === 'function') {
         layoutPollStarted = true;
-        setInterval(refreshLayout, 1000);
+        setInterval(function () { refreshLayout(); syncVideo(); }, 1000);
       }
       refreshLayout();
 
@@ -1701,6 +1822,7 @@
     } catch (e) { log('Apple UI failed:', e && e.message); }
   }
 
+  var scrubDocWired = false;
   var tapWired = false;
   function wireTapToggle() {
     if (tapWired) return;
@@ -1730,6 +1852,9 @@
       var st = document.createElement('style');
       st.id = 'ytnf-apple-hide';
       st.textContent =
+        '#ytnf-apple button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;' +
+        'transition:transform .12s ease,opacity .25s ease}' +
+        '#ytnf-apple button:active{transform:scale(.92)}' +
         '#movie_player.ytnf-on .ytp-chrome-bottom,' +
         '#movie_player.ytnf-on .ytp-chrome-top,' +
         '#movie_player.ytnf-on .ytp-gradient-bottom,' +
@@ -1746,30 +1871,33 @@
     if (typeof MutationObserver !== 'function' || !player) return;
     if (CAP.observer) { try { CAP.observer.disconnect(); } catch (e) {} }
     var obs = new MutationObserver(function () {
-      var v = null;
-      try { v = player.querySelector('video.html5-main-video, video'); } catch (e) {}
-      if (v && v !== CAP.video) {
-        log('video element replaced; re-applying prefs + captions');
-        CAP.video = v;
-        wireSpeed(v);
-        wireEnded(v);
-        enforceSpeed();
-        if (CAP.pr) loadCaptions(v, player, CAP.pr);
-      }
+      // subtree:true — the <video> sits inside .html5-video-container,
+      // one level below the player; the old subtree:false watch
+      // almost never saw a swap. syncVideo() adopts + re-wires.
+      var before = CAP.video;
+      var v = syncVideo();
+      if (v && v !== before && CAP.pr) loadCaptions(v, player, CAP.pr);
     });
-    try { obs.observe(player, { childList: true, subtree: false }); } catch (e) {}
+    try { obs.observe(player, { childList: true, subtree: true }); } catch (e) {}
     CAP.observer = obs;
   }
 
+  var setupForId = null; // videoId the live overlay was built for
   function setupWatch() {
+    var vid = isWatchPage() ? currentVideoId() : null;
+    // One navigation fires setupWatch up to three times (document +
+    // window yt-navigate-finish, plus the href poll). If the overlay
+    // already serves this video and the player is alive, a duplicate
+    // run only tears state down — coalesce it into a re-sync.
+    if (vid && setupForId === vid && AUI.root && findPlayer()) { syncVideo(); return; }
     CAP.gen++;
     var gen = CAP.gen;
     clearCaptionTracks();
     if (CAP.observer) { try { CAP.observer.disconnect(); } catch (e) {} CAP.observer = null; }
-    CAP.video = null; CAP.player = null; CAP.pr = null;
+    CAP.pr = null;
     setStatus('idle');
-    if (!isWatchPage()) return;
-    CAP.videoId = currentVideoId();
+    if (!isWatchPage()) { setupForId = null; return; }
+    CAP.videoId = vid;
     loadPrefs().then(function () {
       if (gen !== CAP.gen) return;
       var tries = 0;
@@ -1777,25 +1905,44 @@
         if (gen !== CAP.gen) return;
         var player = findPlayer();
         var video = findVideo();
-        var pr = getPlayerResponse();
-        var prId = null;
-        try { prId = pr && pr.videoDetails && pr.videoDetails.videoId; } catch (e) {}
-        if (video && player && pr && (!CAP.videoId || !prId || prId === CAP.videoId)) {
-          CAP.video = video; CAP.player = player; CAP.pr = pr;
-          wireSpeed(video);
-          wireEnded(video);
+        // The UI builds as soon as player + video exist. It used to
+        // ALSO wait for the player response to match the new video;
+        // on SPA navigation that global can lag or never match, and
+        // while it waited CAP.video sat null — a live-looking
+        // overlay whose pause button did nothing. Captions and
+        // quality now wait for the response in their own loop.
+        if (video && player) {
+          CAP.player = player;
+          adoptVideo(video);
           if (!PREFS.autoplayNext) ensureYouTubeAutoplay(false);
           buildAppleUI(player);
-          enforceSpeed();
-          applyQuality(player, gen);
           watchVideoReplacement(player);
-          loadCaptions(video, player, pr);
+          setupForId = vid;
+          waitForResponse(gen, player);
           return;
         }
         if (++tries < 24) setTimeout(tick, 500);
         else setStatus('error', 'player-timeout');
       })();
     });
+  }
+
+  function waitForResponse(gen, player) {
+    var tries = 0;
+    (function tick() {
+      if (gen !== CAP.gen) return;
+      var pr = getPlayerResponse();
+      var prId = null;
+      try { prId = pr && pr.videoDetails && pr.videoDetails.videoId; } catch (e) {}
+      if (pr && (!CAP.videoId || !prId || prId === CAP.videoId)) {
+        CAP.pr = pr;
+        var v = syncVideo();
+        if (v) loadCaptions(v, player, pr);
+        applyQuality(player, gen);
+        return;
+      }
+      if (++tries < 24) setTimeout(tick, 500);
+    })();
   }
 
   /* ---------------- navigation wiring ---------------- */

@@ -105,6 +105,7 @@ function makeEnv({ hostname = 'www.youtube.com', video = null, playerResponse = 
   const storageData = initialPrefs ? { ytnf_prefs: initialPrefs } : {};
   const storageSetCalls = [];
 
+  const holder = { current: video };
   const player = {
     id: 'movie_player',
     children: [],
@@ -119,7 +120,7 @@ function makeEnv({ hostname = 'www.youtube.com', video = null, playerResponse = 
     setAttribute() {},
     classList: null,
     appendChild(el) { this.children.push(el); return el; },
-    querySelector() { return video; },
+    querySelector() { return holder.current; },
     getOption() { return selectedLang ? { languageCode: selectedLang } : null; },
     getAvailableQualityLevels() { return levels; },
     setPlaybackQualityRange(code) { this.qualityCalls.push(code); },
@@ -141,7 +142,7 @@ function makeEnv({ hostname = 'www.youtube.com', video = null, playerResponse = 
       if (tag === 'track') return makeTrackEl();
       return makeEl(tag);
     },
-    querySelector() { return video; },
+    querySelector() { return holder.current; },
     querySelectorAll() { return []; },
     getElementById(id) {
       if (id === 'movie_player') return player;
@@ -199,7 +200,7 @@ function makeEnv({ hostname = 'www.youtube.com', video = null, playerResponse = 
   sandbox.window.wrappedJSObject = wrapped;
   sandbox.window.Element = function Element() {};
   vm.createContext(sandbox);
-  return { sandbox, listeners, injected, store, fetched, player, storageData, storageSetCalls };
+  return { sandbox, listeners, injected, store, fetched, player, storageData, storageSetCalls, swapVideo(v) { holder.current = v; } };
 }
 
 function clickEvent(target) {
@@ -531,8 +532,14 @@ const okFetch = (env) => (u) => {
     assert.strictEqual(video.currentTime, 25, 'pointerdown seeks to 25%');
     assert.strictEqual(video.paused, true, 'playback pauses while scrubbing');
     (env.listeners.pointermove || []).forEach((fn) => fn({ clientX: 150 }));
-    assert.strictEqual(video.currentTime, 75, 'drag seeks live to 75%');
+    // v2.5: mid-drag seeks are throttled (~90ms) but the bar follows
+    // the finger optimistically, with the time bubble showing the
+    // target; the exact seek lands on release.
+    const AUI19 = env.sandbox.window.__ytnfAUI;
+    assert.strictEqual(AUI19.scrubFill.style.width, '75.00%', 'bar follows the finger mid-drag');
+    assert.ok(AUI19.scrubBubble.textContent.includes('1:15'), 'bubble shows target time: ' + AUI19.scrubBubble.textContent);
     (env.listeners.pointerup || []).forEach((fn) => fn({}));
+    assert.strictEqual(video.currentTime, 75, 'release lands the exact seek at 75%');
     assert.strictEqual(video.paused, false, 'release resumes playback');
     console.log('PASS 19 drag scrubbing seeks live and resumes');
   }
@@ -573,7 +580,7 @@ const okFetch = (env) => (u) => {
     }
     const mf = JSON.parse(fs.readFileSync(__dirname + '/../manifest.json', 'utf8'));
     assert.ok(mf.content_scripts[0].css.includes('player.css'), 'manifest loads player.css');
-    assert.strictEqual(mf.version, '2.4.0');
+    assert.strictEqual(mf.version, '2.5.0');
     console.log('PASS 16 reskin is paint-only, no YouTube control hidden or removed');
   }
 
@@ -874,5 +881,84 @@ const okFetch = (env) => (u) => {
     console.log('PASS 31 auto-PiP off via preference');
   }
 
-  console.log('ALL 31 TESTS PASS');
+  // 32. THE v2.5 BUG: YouTube swaps the <video> element when a new
+  // video is picked from the current one. The overlay must adopt
+  // the new element — pause, state and readouts follow it, and the
+  // detached old element is never touched again.
+  {
+    const video1 = makeVideo();
+    video1.paused = false;
+    const env = makeEnv({ video: video1, playerResponse: captionPR([ytTrack('en', '', 'English')]) });
+    env.sandbox.fetch = okFetch(env);
+    vm.runInContext(src, env.sandbox);
+    await flush();
+    const AUI = env.sandbox.window.__ytnfAUI;
+    const root = env.player.children.find((c) => c.id === 'ytnf-apple');
+    const playBtn = findAll(root, (c) => c.dataset && c.dataset.act === 'play')[0];
+    playBtn.click();
+    assert.strictEqual(video1.paused, true, 'pause works on the first video');
+    playBtn.click();
+    assert.strictEqual(video1.paused, false, 'resume works on the first video');
+
+    const video2 = makeVideo();
+    video2.paused = false; video2.currentTime = 30; video2.duration = 300;
+    env.swapVideo(video2);
+    AUI.syncVideo(); // the same entry point the observer + 1s poll use
+    playBtn.click();
+    assert.strictEqual(video2.paused, true, 'pause hits the NEW element after a swap');
+    assert.strictEqual(video1.paused, false, 'the detached element is untouched');
+    assert.strictEqual(playBtn.textContent, '▶︎', 'icon reflects the new element (paused)');
+    video2.currentTime = 150;
+    (video2.listeners.timeupdate || []).forEach((fn) => fn());
+    assert.strictEqual(AUI.tElapsed.textContent, '2:30', 'readouts follow the new element');
+    video2.paused = false;
+    (video2.listeners.play || []).forEach((fn) => fn());
+    assert.strictEqual(playBtn.textContent, '❙❙', 'play state syncs from the new element');
+    console.log('PASS 32 video element swap: pause + transport adopt the new element');
+  }
+
+  // 33. A hide timer armed while playing must not fire after the
+  // video has paused — it re-validates at fire time.
+  {
+    const video = makeVideo();
+    video.paused = false;
+    const env = makeEnv({ video, playerResponse: captionPR([ytTrack('en', '', 'English')]) });
+    env.sandbox.fetch = okFetch(env);
+    vm.runInContext(src, env.sandbox);
+    await flush();
+    const AUI = env.sandbox.window.__ytnfAUI;
+    const tapHandlers = env.player._ls.click || [];
+    tapHandlers[tapHandlers.length - 1]({ target: { closest: () => null }, stopPropagation() {}, preventDefault() {} });
+    assert.strictEqual(AUI.visible, true, 'UI up after tap');
+    video.paused = true; // state changes without the event reaching us
+    await flush(); // the armed timer fires here
+    assert.strictEqual(AUI.visible, true, 'stale timer does not hide the UI while paused');
+    video.paused = false;
+    (video.listeners.play || []).forEach((fn) => fn());
+    await flush();
+    assert.strictEqual(AUI.visible, false, 'timer still hides the UI while playing');
+    console.log('PASS 33 hide timer re-validates at fire time');
+  }
+
+  // 34. The overlay must build (and pause must work) even when the
+  // player response never matches the new video — captions wait,
+  // controls don't.
+  {
+    const video = makeVideo();
+    video.paused = false;
+    const pr = captionPR([ytTrack('en', '', 'English')]);
+    pr.videoDetails.videoId = 'someone-elses-video';
+    const env = makeEnv({ video, playerResponse: pr });
+    env.sandbox.fetch = okFetch(env);
+    vm.runInContext(src, env.sandbox);
+    await flush();
+    const root = env.player.children.find((c) => c.id === 'ytnf-apple');
+    assert.ok(root, 'overlay built despite the lagging player response');
+    const playBtn = findAll(root, (c) => c.dataset && c.dataset.act === 'play')[0];
+    playBtn.click();
+    assert.strictEqual(video.paused, true, 'pause works with no caption response yet');
+    console.log('PASS 34 UI builds before the player response catches up');
+  }
+
+  console.log('ALL 34 TESTS PASS');
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });

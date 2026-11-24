@@ -406,7 +406,12 @@
     setTimeout(function () { try { mo.disconnect(); } catch (e) {} }, 12000);
 
     /* ---------- draggable pill + Recent shows sheet (top frame) ---------- */
-    if (isTop && armedHere) buildSitePill();
+    /* The pill is on EVERY page now (v0.12.6): Orion sometimes
+     * swallows the toolbar-icon tap so the popup never appears
+     * until a refresh, and on un-armed pages the popup was the
+     * only door to the menu. Tap = Recent sheet; LONG-PRESS =
+     * the full menu as an in-page panel (openMenuPanel). */
+    if (isTop) buildSitePill();
 
     function buildSitePill() {
       if (document.getElementById('hyo-site-pill')) return;
@@ -419,7 +424,7 @@
         'backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%);' +
         'box-shadow:0 10px 28px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.16);' +
         'touch-action:none;-webkit-user-select:none;user-select:none');
-      makeDraggable(pillEl, openSheet);
+      makeDraggable(pillEl, openSheet, openMenuPanel);
       document.body.appendChild(pillEl);
       function fsCheck() {
         var fs = document.fullscreenElement || document.webkitFullscreenElement;
@@ -431,8 +436,10 @@
       document.addEventListener('webkitendfullscreen', function () { pillEl.style.display = ''; }, true);
     }
 
-    function makeDraggable(elm, onTap) {
+    function makeDraggable(elm, onTap, onLongPress) {
       var sx = 0, sy = 0, ox = 0, oy = 0, moved = false, dragging = false;
+      var lpTimer = 0, longPressed = false;
+      function cancelLp() { if (lpTimer) { clearTimeout(lpTimer); lpTimer = 0; } }
       function applySaved() {
         if (store.pillPos) {
           var r = elm.getBoundingClientRect();
@@ -446,16 +453,27 @@
         }
       }
       elm.addEventListener('pointerdown', function (ev) {
-        dragging = true; moved = false;
+        dragging = true; moved = false; longPressed = false;
         sx = ev.clientX; sy = ev.clientY;
         var r = elm.getBoundingClientRect();
         ox = r.left; oy = r.top;
         try { elm.setPointerCapture(ev.pointerId); } catch (e) {}
+        if (onLongPress) {
+          cancelLp();
+          lpTimer = setTimeout(function () {
+            lpTimer = 0;
+            if (dragging && !moved) {
+              longPressed = true;
+              try { if (navigator.vibrate) navigator.vibrate(12); } catch (e) {}
+              onLongPress();
+            }
+          }, 550);
+        }
       });
       elm.addEventListener('pointermove', function (ev) {
         if (!dragging) return;
         var dx = ev.clientX - sx, dy = ev.clientY - sy;
-        if (Math.abs(dx) + Math.abs(dy) > 8) moved = true;
+        if (Math.abs(dx) + Math.abs(dy) > 8) { moved = true; cancelLp(); }
         if (!moved) return;
         var r = elm.getBoundingClientRect();
         var c = H.clampPillPos(ox + dx, oy + dy, r.width, r.height, innerWidth, innerHeight);
@@ -467,6 +485,8 @@
       elm.addEventListener('pointerup', function () {
         if (!dragging) return;
         dragging = false;
+        cancelLp();
+        if (longPressed) { longPressed = false; return; }
         if (moved) {
           var r = elm.getBoundingClientRect();
           store.pillPos = {
@@ -584,6 +604,142 @@
         wrap.appendChild(panel);
         wrap.addEventListener('click', function (ev) { if (ev.target === wrap) wrap.remove(); });
         document.body.appendChild(wrap);
+      });
+    }
+
+    /* ---------- the full menu as an in-page panel (v0.12.6) ----------
+     * Orion sometimes swallows the toolbar-icon tap, so the native
+     * popup never appears until the browser is refreshed — and no
+     * extension API can force that native surface open. The second
+     * door: long-press the pill and the ACTUAL popup page is embedded
+     * in a panel on this page. If the embedded popup doesn't announce
+     * itself within 4 s (Orion refuses the embed, or the popup context
+     * is the wedged part), the panel swaps in native essentials —
+     * Continue Watching + app/remote buttons — so a working menu
+     * comes up either way. */
+    function openMenuPanel() {
+      if (document.getElementById('hyo-menu')) return;
+      var wrap = document.createElement('div');
+      wrap.id = 'hyo-menu';
+      wrap.setAttribute('style', 'position:fixed;inset:0;z-index:2147483560;background:rgba(4,6,12,0.45);' +
+        'backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);' +
+        'font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",Arial,sans-serif');
+      var panel = document.createElement('div');
+      panel.setAttribute('style', 'position:absolute;top:0;right:0;bottom:0;width:400px;max-width:94vw;display:flex;flex-direction:column;' +
+        'background:rgba(13,16,28,0.82);color:#f2f4f8;border-left:1px solid rgba(255,255,255,0.18);' +
+        'backdrop-filter:blur(24px) saturate(170%);-webkit-backdrop-filter:blur(24px) saturate(170%);' +
+        'box-shadow:-14px 0 44px rgba(0,0,0,0.5)');
+      var head = document.createElement('div');
+      head.setAttribute('style', 'display:flex;align-items:center;justify-content:space-between;padding:14px 16px 10px');
+      var title = document.createElement('div');
+      title.textContent = '\ud83d\udcfa HeckYeah';
+      title.setAttribute('style', 'font-size:17px;font-weight:750');
+      head.appendChild(title);
+      var closeBtn = document.createElement('button');
+      closeBtn.textContent = '\u2715';
+      closeBtn.setAttribute('style', 'background:rgba(255,255,255,0.12);color:#fff;border:none;border-radius:50%;width:30px;height:30px;font-size:14px;cursor:pointer');
+      head.appendChild(closeBtn);
+      panel.appendChild(head);
+      var body = document.createElement('div');
+      body.setAttribute('style', 'flex:1;position:relative;min-height:0');
+      var note = document.createElement('div');
+      note.textContent = 'Opening menu\u2026';
+      note.setAttribute('style', 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#9fb0c9;font-size:14px');
+      body.appendChild(note);
+      panel.appendChild(body);
+      wrap.appendChild(panel);
+
+      var alive = false, frame = null;
+      function teardown() {
+        window.removeEventListener('message', onMsg);
+        if (wrap.parentNode) wrap.remove();
+      }
+      function onMsg(ev) {
+        if (frame && ev.source === frame.contentWindow && ev.data === 'hyo-popup-alive') {
+          alive = true;
+          if (note.parentNode) note.remove();
+        }
+      }
+      closeBtn.addEventListener('click', teardown);
+      wrap.addEventListener('click', function (ev) { if (ev.target === wrap) teardown(); });
+      window.addEventListener('message', onMsg);
+      document.body.appendChild(wrap);
+
+      var url = null;
+      try {
+        var api = null;
+        try { if (typeof browser !== 'undefined' && browser) api = browser; } catch (e) {}
+        if (!api) { try { if (typeof chrome !== 'undefined' && chrome) api = chrome; } catch (e) {} }
+        if (api && api.runtime && api.runtime.getURL) url = api.runtime.getURL('popup.html');
+      } catch (e) {}
+      if (url) {
+        frame = document.createElement('iframe');
+        frame.setAttribute('style', 'position:absolute;inset:0;width:100%;height:100%;border:0;background:transparent');
+        frame.src = url;
+        body.appendChild(frame);
+        setTimeout(function () { if (!alive && wrap.parentNode) paintMenuFallback(body, frame, note); }, 4000);
+      } else {
+        paintMenuFallback(body, null, note);
+      }
+    }
+
+    function paintMenuFallback(body, frame, note) {
+      if (frame && frame.parentNode) frame.remove();
+      if (note && note.parentNode) note.remove();
+      var box = document.createElement('div');
+      box.setAttribute('style', 'position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px 16px 20px');
+      var hint = document.createElement('div');
+      hint.textContent = 'The embedded menu didn\u2019t load \u2014 here are the essentials.';
+      hint.setAttribute('style', 'color:#9fb0c9;font-size:12.5px;line-height:1.45;margin-bottom:10px');
+      box.appendChild(hint);
+      var actions = document.createElement('div');
+      actions.setAttribute('style', 'display:flex;gap:8px;margin-bottom:12px');
+      var appBtn = document.createElement('button');
+      appBtn.textContent = '\u2039 HeckYeah app';
+      appBtn.setAttribute('style', 'background:#0a84ff;color:#fff;border:none;border-radius:999px;padding:8px 14px;font-size:13.5px;font-weight:600;cursor:pointer');
+      appBtn.addEventListener('click', function () {
+        requestPiPEverywhere();
+        setTimeout(function () { location.href = 'https://fmhy.net/'; }, 450);
+      });
+      actions.appendChild(appBtn);
+      if (H.Remote) {
+        var pairBtn = document.createElement('button');
+        pairBtn.textContent = '\ud83d\udcf1 Pair phone';
+        pairBtn.setAttribute('style', 'background:rgba(255,255,255,0.12);color:#fff;border:none;border-radius:999px;padding:8px 14px;font-size:13.5px;font-weight:600;cursor:pointer');
+        pairBtn.addEventListener('click', function () { H.Remote.startHostPanel(); });
+        actions.appendChild(pairBtn);
+      }
+      box.appendChild(actions);
+      body.appendChild(box);
+      H.loadStore().then(function (fresh) {
+        var groups = H.groupByShow((fresh.entries || []).filter(function (e) { return !H.isFinished(e); }));
+        if (!groups.length) {
+          var empty = document.createElement('div');
+          empty.textContent = 'Nothing in Continue Watching yet.';
+          empty.setAttribute('style', 'color:#9fb0c9;font-size:14px;padding:6px 2px');
+          box.appendChild(empty);
+          return;
+        }
+        var sect = document.createElement('div');
+        sect.textContent = 'CONTINUE WATCHING';
+        sect.setAttribute('style', 'font-size:11px;font-weight:700;letter-spacing:1.1px;color:#7d8494;margin:8px 0 4px');
+        box.appendChild(sect);
+        groups.forEach(function (g) {
+          var e = g.latest;
+          var row = document.createElement('div');
+          row.setAttribute('style', 'background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:16px;padding:12px 13px;margin:8px 0;cursor:pointer');
+          var t = document.createElement('div');
+          t.textContent = g.showTitle;
+          t.setAttribute('style', 'font-size:15px;font-weight:650');
+          row.appendChild(t);
+          var sub = document.createElement('div');
+          sub.textContent = (e.epLabel ? e.epLabel + ' \u00b7 ' : '') + H.relTime(e.updatedAt) +
+            (e.dur > 0 && e.pos != null ? ' \u00b7 ' + H.fmtTime(Math.max(0, e.dur - e.pos)) + ' left' : '');
+          sub.setAttribute('style', 'font-size:12.5px;color:#9fb0c9;margin-top:3px');
+          row.appendChild(sub);
+          row.addEventListener('click', function () { location.href = e.url; });
+          box.appendChild(row);
+        });
       });
     }
 

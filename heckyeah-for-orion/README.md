@@ -1,3 +1,25 @@
+# HeckYeah for Orion — v0.12.6
+
+The menu always comes up, Orion bug or not:
+- Orion sometimes swallows the toolbar-icon tap so the popup
+  never appears until the browser is refreshed. No extension
+  API can force that native surface open — so the menu gets a
+  second door on a surface the extension controls, the same
+  pattern as Beautiful Reader v1.18.8.
+- The HeckYeah pill now shows on EVERY page (it used to appear
+  only on armed/streaming sites). Tap = Recent sheet, as
+  before. LONG-PRESS (550 ms) = the full menu as an in-page
+  panel embedding the actual popup page (Continue Watching,
+  shelves, favorites, drag, update banner — the real thing).
+- If the embedded popup doesn't announce itself within 4 s
+  (Orion refuses the embed, or the popup context is the wedged
+  part), the panel swaps in native essentials — Continue
+  Watching rows plus HeckYeah app / Pair phone buttons — so a
+  working menu comes up either way.
+- popup.js posts a 'hyo-popup-alive' message to its parent
+  after boot when embedded; no-op in the real toolbar popup.
+  popup.html & friends are web-accessible resources now.
+
 # HeckYeah for Orion — v0.12.5
 
 Startup checks + the stale-update banner, fixed:

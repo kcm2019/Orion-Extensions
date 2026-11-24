@@ -10,6 +10,16 @@ var store = null;
 var viewEl = document.getElementById('view');
 var headsub = document.getElementById('headsub');
 
+/* When the popup page is embedded in the in-page menu panel
+ * (tracker.js long-press), announce that this context is alive
+ * and rendered, so the panel keeps the embed instead of swapping
+ * in its fallback. In the real toolbar popup this is a no-op. */
+function announceToParent() {
+  try {
+    if (window.parent && window.parent !== window) window.parent.postMessage('hyo-popup-alive', '*');
+  } catch (e) {}
+}
+
 function el(tag, cls, text) {
   var e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -343,4 +353,5 @@ H.loadStore().then(function (s) {
   store = s;
   renderHome();
   if (U) { refreshUpdFromStore(); runUpdCheck(false); }
+  announceToParent();
 });

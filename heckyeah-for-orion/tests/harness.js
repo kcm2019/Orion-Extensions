@@ -447,15 +447,30 @@ function test(name, fn) {
     assert.ok(upd.includes('stale'), 'stored update at/below running version is filtered');
   });
 
+  test('menu panel: a second door when Orion swallows the icon tap', () => {
+    const m = JSON.parse(fs.readFileSync(__dirname + '/../manifest.json', 'utf8'));
+    assert.ok((m.web_accessible_resources || []).includes('popup.html'), 'popup page embeddable');
+    const trk = fs.readFileSync(__dirname + '/../tracker.js', 'utf8');
+    const pop = fs.readFileSync(__dirname + '/../popup.js', 'utf8');
+    assert.ok(trk.includes('if (isTop) buildSitePill();'), 'pill on every page, not just armed ones');
+    assert.ok(trk.includes('openMenuPanel'), 'in-page menu panel exists');
+    assert.ok(trk.includes("getURL('popup.html')") || trk.includes('getURL("popup.html")'), 'panel embeds the real popup');
+    assert.ok(trk.includes('hyo-popup-alive'), 'panel listens for the popup alive signal');
+    assert.ok(pop.includes('hyo-popup-alive'), 'popup announces itself when embedded');
+    assert.ok(trk.includes('paintMenuFallback'), 'native fallback if the embed never announces');
+    assert.ok(trk.includes('onLongPress'), 'long-press opens the panel');
+    assert.ok(trk.includes('makeDraggable(pillEl, openSheet, openMenuPanel)'), 'pill: tap = sheet, long-press = menu');
+  });
+
   await test('extGet can never hang a boot: promise/callback/timeout all settle', () => {
     const common = fs.readFileSync(__dirname + '/../common.js', 'utf8');
     assert.ok(common.includes("typeof r.then === 'function'"), 'promise return checked before use');
     assert.ok(common.includes('fin(null); }, 3000'), 'storage read self-resolves after 3 s');
   });
 
-  await test('manifest parses, version 0.12.5, files exist', () => {
+  await test('manifest parses, version 0.12.6, files exist', () => {
     const m = JSON.parse(fs.readFileSync(__dirname + '/../manifest.json', 'utf8'));
-    assert.strictEqual(m.version, '0.12.5');
+    assert.strictEqual(m.version, '0.12.6');
     assert.strictEqual(m.manifest_version, 2);
     m.content_scripts.forEach((cs) => {
       (cs.js || []).forEach((f) => assert.ok(fs.existsSync(__dirname + '/../' + f), f));

@@ -11,7 +11,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '0.12.5';
+  var VERSION = '0.12.6';
   var ADDON_ID = 'heckyeah-orion@local';
   var FEED_URL = 'https://raw.githubusercontent.com/kcm2019/Orion-Extensions/main/updates.json';
   var THROTTLE_MS = 12 * 60 * 60 * 1000; // 12 h between auto checks

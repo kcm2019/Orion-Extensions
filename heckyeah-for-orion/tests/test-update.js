@@ -55,7 +55,7 @@ function test(name, fn) {
 
 (async () => {
   await test('constants: version, id, feed', () => {
-    assert.strictEqual(U.VERSION, '0.12.5');
+    assert.strictEqual(U.VERSION, '0.12.6');
     assert.strictEqual(U.ADDON_ID, 'heckyeah-orion@local');
     assert.ok(U.FEED_URL.includes('Orion-Extensions'));
   });
@@ -168,7 +168,7 @@ function test(name, fn) {
 
   await test('getState: an available entry <= running version is stale and cleared', async () => {
     const env = makeEnv({
-      seed: { upd_available: { version: '0.12.5', update_link: 'u', found_at: 1 } },
+      seed: { upd_available: { version: '0.12.6', update_link: 'u', found_at: 1 } },
       fetchImpl: () => okRes({}),
     });
     const st = await env.U.getState();
@@ -187,7 +187,7 @@ function test(name, fn) {
     await env.U.dismiss('0.12.0');
     const st = await env.U.getState();
     assert.strictEqual(st.dismissed, '0.12.0');
-    assert.strictEqual(st.version, '0.12.5');
+    assert.strictEqual(st.version, '0.12.6');
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);

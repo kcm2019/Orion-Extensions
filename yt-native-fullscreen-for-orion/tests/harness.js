@@ -71,6 +71,7 @@ function makeVideo() {
     disablePictureInPicture: true,
     volume: 0.8,
     muted: false,
+    webkitPresentationMode: 'inline',
     pickerCalls: 0,
     webkitShowPlaybackTargetPicker() { this.pickerCalls++; },
     webkitDisplayingFullscreen: false,
@@ -593,7 +594,7 @@ const okFetch = (env) => (u) => {
     }
     const mf = JSON.parse(fs.readFileSync(__dirname + '/../manifest.json', 'utf8'));
     assert.ok(mf.content_scripts[0].css.includes('player.css'), 'manifest loads player.css');
-    assert.strictEqual(mf.version, '2.8.0');
+    assert.strictEqual(mf.version, '2.9.0');
     console.log('PASS 16 reskin is paint-only, no YouTube control hidden or removed');
   }
 
@@ -1098,5 +1099,123 @@ const okFetch = (env) => (u) => {
     console.log('PASS 38 tap-to-pause: gesture swallowed by default, toggle restores stock');
   }
 
-  console.log('ALL 38 TESTS PASS');
+  // 39. Panel behaviour (v2.9): the lower-right pill hides while
+  // the menu is up, a tap outside dismisses the menu (chrome
+  // stays up), taps inside the panel don't, and the panel shields
+  // touch gestures so a swipe-down can't drag the player into
+  // the miniplayer.
+  {
+    const video = makeVideo();
+    const env = makeEnv({ video, playerResponse: captionPR([ytTrack('en', '', 'English')]) });
+    env.sandbox.fetch = okFetch(env);
+    vm.runInContext(src, env.sandbox);
+    await flush();
+    const AUI = env.sandbox.window.__ytnfAUI;
+    const root = env.player.children.find((c) => c.id === 'ytnf-apple');
+    assert.ok((AUI.panel._ls.touchmove || []).length >= 1 &&
+      (AUI.panel._ls.touchstart || []).length >= 1, 'panel shields touch gestures');
+    assert.ok(String(AUI.panel.style.cssText).includes('touch-action:pan-y'), 'panel keeps its own scrolling');
+    findAll(root, (c) => c.dataset && c.dataset.act === 'menu')[0].click();
+    assert.strictEqual(AUI.panelOpen, true, 'menu open');
+    assert.strictEqual(AUI.gearPill.style.visibility, 'hidden', 'lower-right pill hidden while the menu is up');
+    const ck = (env.listeners.click || []).slice(-1)[0];
+    const videoTap = {
+      closest(sel) {
+        if (sel.includes('#movie_player')) return {};
+        return null;
+      },
+    };
+    const mkEv = (t) => ({
+      target: t, stopped: false,
+      stopPropagation() { this.stopped = true; },
+      preventDefault() {},
+      stopImmediatePropagation() { this.stopped = true; },
+    });
+    ck(mkEv(videoTap));
+    assert.strictEqual(AUI.panelOpen, false, 'tap elsewhere in the player dismisses the menu');
+    assert.strictEqual(AUI.visible, true, 'the dismissal tap leaves the chrome up');
+    assert.strictEqual(AUI.gearPill.style.visibility, 'visible', 'lower-right pill is back');
+    findAll(root, (c) => c.dataset && c.dataset.act === 'menu')[0].click();
+    assert.strictEqual(AUI.panelOpen, true, 'menu reopened');
+    const inPanel = { closest: (sel) => (sel.includes('.ytnf-panel') ? {} : null) };
+    ck(mkEv(inPanel));
+    assert.strictEqual(AUI.panelOpen, true, 'taps inside the panel do not dismiss it');
+    console.log('PASS 39 panel: pill hides, outside tap dismisses, gestures shielded');
+  }
+
+  // 40. Queue scrape (v2.9): the queue panel renderers and the
+  // lockup view-model cards are sources too, not just the classic
+  // compact renderers.
+  {
+    const video = makeVideo();
+    const env = makeEnv({ video, playerResponse: captionPR([ytTrack('en', '', 'English')]) });
+    env.sandbox.fetch = okFetch(env);
+    vm.runInContext(src, env.sandbox);
+    await flush();
+    const panelAnchor = {
+      getAttribute: (k) => (k === 'href' ? '/watch?v=queue99x' : null),
+      closest: (sel) => (String(sel).includes('ytd-playlist-panel-video-renderer')
+        ? { querySelector: () => ({ getAttribute: () => 'Queued Panel Vid', textContent: 'Queued Panel Vid' }) }
+        : null),
+      textContent: '',
+    };
+    const lockupAnchor = {
+      getAttribute: (k) => (k === 'href' ? '/watch?v=lock88y' : (k === 'title' ? 'Lockup Vid' : null)),
+      closest: () => null,
+      textContent: '',
+    };
+    env.sandbox.document.querySelectorAll = (sel) => {
+      const q = String(sel);
+      if (q.includes('ytd-playlist-panel-video-renderer') && q.includes('a[href')) return [panelAnchor];
+      if (q.includes('yt-lockup-view-model')) return [lockupAnchor];
+      return [];
+    };
+    const root = env.player.children.find((c) => c.id === 'ytnf-apple');
+    findAll(root, (c) => c.dataset && c.dataset.act === 'menu')[0].click();
+    findAll(root, (c) => c.dataset && c.dataset.page === 'queue')[0].click();
+    const addPanel = findAll(root, (c) => c.dataset && c.dataset.qadd === 'queue99x')[0];
+    const addLockup = findAll(root, (c) => c.dataset && c.dataset.qadd === 'lock88y')[0];
+    assert.ok(addPanel, 'queue-panel video offered on the Queue page');
+    assert.ok(addLockup, 'lockup-card video offered on the Queue page');
+    addPanel.click();
+    const saved = env.storageSetCalls.map((c) => c.ytnf_prefs).filter(Boolean).pop();
+    assert.ok(saved.queue.some((q) => q.id === 'queue99x' && q.title === 'Queued Panel Vid'),
+      'queue-panel video added with its real title');
+    console.log('PASS 40 queue scrape: playlist-panel + lockup sources');
+  }
+
+  // 41. Resume-after-exit (v2.9): closing PiP or exiting native
+  // fullscreen resumes a video that was playing; the toggle
+  // turns the behaviour off.
+  {
+    const video = makeVideo();
+    const env = makeEnv({ video, playerResponse: captionPR([ytTrack('en', '', 'English')]) });
+    env.sandbox.fetch = okFetch(env);
+    vm.runInContext(src, env.sandbox);
+    await flush();
+    const AUI = env.sandbox.window.__ytnfAUI;
+    const root = env.player.children.find((c) => c.id === 'ytnf-apple');
+    const fire = (type) => (video.listeners[type] || []).forEach((fn) => fn());
+    video.paused = false;
+    fire('timeupdate'); // establishes "was playing"
+    video.webkitPresentationMode = 'picture-in-picture';
+    fire('webkitpresentationmodechanged');
+    video.paused = true; // the system pauses as PiP closes
+    video.webkitPresentationMode = 'inline';
+    fire('webkitpresentationmodechanged');
+    assert.strictEqual(video.paused, false, 'closing PiP resumes playback');
+    video.paused = true; // the system pauses as fullscreen exits
+    fire('webkitendfullscreen');
+    assert.strictEqual(video.paused, false, 'exiting fullscreen resumes playback');
+    findAll(root, (c) => c.dataset && c.dataset.act === 'menu')[0].click();
+    findAll(root, (c) => c.dataset && c.dataset.pick === 'resume')[0].click();
+    const saved = env.storageSetCalls.map((c) => c.ytnf_prefs).filter(Boolean).pop();
+    assert.strictEqual(saved.resumeOnExit, false, 'resume preference persisted off');
+    video.paused = true;
+    fire('webkitendfullscreen');
+    assert.strictEqual(video.paused, true, 'with the toggle off, the exit pause stands (stock)');
+    console.log('PASS 41 resume-after-exit: PiP/fullscreen exits resume, toggle disables');
+  }
+
+  console.log('ALL 41 TESTS PASS');
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });

@@ -84,7 +84,23 @@ Firefox Manifest V2 extension for Orion on iPhone/iPad.
    refraction is native-only); off = the classic frosted glass.
    The AirPlay button calls WebKit's playback-target picker
    where available.
-8. **Tap Screen to Pause toggle** (v2.8) — a tap on the video
+8. **Panel behaviour** (v2.9) — while the settings menu is open
+   the lower-right button pill hides; tapping anywhere outside
+   the menu (in the player or elsewhere on the page) dismisses
+   it; and touch gestures that start on the menu are stopped at
+   the panel, so swiping down on it no longer drags the player
+   into the miniplayer (the menu's own scrolling still works).
+9. **Queue sources** (v2.9) — the Queue page's add list is
+   scraped from YouTube's queue panel
+   (ytd-playlist-panel-video-renderer) and the current lockup
+   view-model Up Next cards as well as the classic compact
+   renderers, so it works when watching from a queue.
+10. **Resume After PiP / Fullscreen** (v2.9) — closing PiP or
+    exiting the native fullscreen player pauses the video by
+    default; with this on (the default) the extension resumes
+    playback instead. Turn it off in settings for stock
+    behaviour.
+11. **Tap Screen to Pause toggle** (v2.8) — a tap on the video
    toggles only the overlay and never pauses (the whole gesture —
    pointerdown, touchstart, click — is swallowed in the capture
    phase for any non-interactive surface inside the player,
@@ -114,7 +130,7 @@ Notes / trade-offs:
 
 ## Install in Orion (iPhone / iPad)
 
-1. Download `yt-native-fullscreen-orion-2.8.0.zip` to your iPhone
+1. Download `yt-native-fullscreen-orion-2.9.0.zip` to your iPhone
    (Files → Downloads). **Don't unzip it.** The `.xpi` is the same
    package. If you installed v1.0/v1.1, remove that version first.
 2. Orion: **Settings → Extensions** → turn **Firefox extensions** on.
@@ -127,7 +143,7 @@ Notes / trade-offs:
    **Settings → Accessibility → Subtitles & Captioning →
    Closed Captions + SDH** is on.
 
-## On-device checks for v2.8.0
+## On-device checks for v2.9.0
 
 1. Open a video and tap it: the centre cluster appears (↺10,
    play/pause, 10↻) plus the glass bottom bar. Tap again to
@@ -169,7 +185,15 @@ Notes / trade-offs:
     video the centre pause button, ±10s skips and scrubber must
     all work immediately, the times must belong to the new video,
     and pausing must keep the UI up.
-11. **Tap behaviour (v2.8)**: with the video playing, tap the
+11. **Menu + queue + resume (v2.9)**: open ⚙︎ — the
+    Miniplayer/Settings pill should vanish; tap the video — the
+    menu closes and the controls stay up; swipe down on the menu
+    — the player must NOT drop into the miniplayer. Watching
+    from a queue, the Queue page should offer the rail videos to
+    add. Play in PiP, close PiP — playback should continue; same
+    after exiting native fullscreen. ⚙︎ → Resume After PiP /
+    Fullscreen off restores the stock pause.
+12. **Tap behaviour (v2.8)**: with the video playing, tap the
     picture (not a button) — the controls should toggle and the
     video must keep playing, every time. Then ⚙︎ → Tap Screen to
     Pause on, and confirm taps pause again like stock YouTube.

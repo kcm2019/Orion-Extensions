@@ -1,5 +1,5 @@
 'use strict';
-/* YT Native Fullscreen for Orion v2.8.0 (Firefox MV2)
+/* YT Native Fullscreen for Orion v2.9.0 (Firefox MV2)
  *
  * v1.0: fullscreen a YouTube video -> iOS native player, via
  *   video.webkitEnterFullscreen() called synchronously in the tap.
@@ -112,6 +112,7 @@
     autoPipScroll: true, // PiP when the player scrolls halfway out of view (Nov 14, separate from removed feature F)
     liquidGlass: false, // v2.6: "true liquid glass" styling; the pill layout itself is permanent since v2.7
     tapToPause: false, // v2.8: tapping the video pauses it (YouTube's stock behaviour). Off (default): a tap toggles ONLY our UI.
+    resumeOnExit: true, // v2.9: keep playing when PiP closes or native fullscreen exits (both pause the video by default). Toggle disables it.
   };
   var prefsLoaded = false;
 
@@ -173,6 +174,7 @@
         if (typeof p.autoPipScroll === 'boolean') PREFS.autoPipScroll = p.autoPipScroll;
         if (typeof p.liquidGlass === 'boolean') PREFS.liquidGlass = p.liquidGlass;
         if (typeof p.tapToPause === 'boolean') PREFS.tapToPause = p.tapToPause;
+        if (typeof p.resumeOnExit === 'boolean') PREFS.resumeOnExit = p.resumeOnExit;
       }
       prefsLoaded = true;
       log('prefs loaded:', JSON.stringify(PREFS));
@@ -774,7 +776,7 @@
     topBar: null, topPillL: null, topPillR: null, volPill: null,
     volTrack: null, volFill: null, volKnob: null, volBtn: null,
     airplayBtn: null, gearPill: null, scrubTrack: null, scrubBubble: null,
-    volScrubbing: false,
+    volScrubbing: false, lastPlayingAt: 0, resumeGuardUntil: 0,
   };
 
   var MIN_VISIBLE_MS = 5000; // Kurt's rule: once up, the UI stays up at least 5s
@@ -1105,6 +1107,28 @@
     v.addEventListener('loadedmetadata', updateTransport);
     v.addEventListener('seeking', updateTransport);
     v.addEventListener('volumechange', function () { updateVolumeUI(); });
+    // Resume-after-exit (v2.9): track "was playing" continuously,
+    // catch PiP-close / fullscreen-exit, and undo the pause those
+    // exits cause — whether it lands before or after the exit
+    // event (a short guard window replays pauses that arrive
+    // late). Our own pause button clears the guard, so a
+    // deliberate pause right after exiting still sticks.
+    v.addEventListener('timeupdate', function () {
+      if (!v.paused) AUI.lastPlayingAt = Date.now();
+    });
+    v.addEventListener('pause', function () {
+      if (PREFS.resumeOnExit && AUI.resumeGuardUntil &&
+          Date.now() < AUI.resumeGuardUntil && !v.ended) {
+        try { v.play(); } catch (e) {}
+      }
+    });
+    v.addEventListener('webkitpresentationmodechanged', function () {
+      var mode = v.webkitPresentationMode || 'inline';
+      var prev = v.__ytnfMode || 'inline';
+      v.__ytnfMode = mode;
+      if (mode === 'inline' && prev === 'picture-in-picture') onPresentationExit(v);
+    });
+    v.addEventListener('webkitendfullscreen', function () { onPresentationExit(v); });
     v.addEventListener('ended', function () { updateTransport(); showUI(); });
   }
 
@@ -1141,12 +1165,18 @@
    * off so it can't override the stop). The toggle never gates
    * the queue itself. */
   function scrapeUpNext() {
+    // v2.9 queue fix: the old scrape only knew the classic
+    // ytd-compact-video-renderer. Watching from a queue (Kurt's
+    // screenshot) puts ytd-playlist-panel-video-renderer items in
+    // the rail, and current Up Next markup uses yt-lockup-view-
+    // model cards — both scraped empty, so the Queue page offered
+    // nothing to add. Sources now, in order: YouTube's queue
+    // panel, classic renderers, lockup cards, then any watch link
+    // in the secondary column as a fallback.
     var out = [];
     var seen = {};
-    try {
-      var links = document.querySelectorAll(
-        'ytd-compact-video-renderer a[href*="/watch?v="], ' +
-        'ytd-compact-radio-renderer a[href*="/watch?v="]');
+    function grab(links, rendererSel) {
+      if (!links) return;
       for (var i = 0; i < links.length && out.length < 12; i++) {
         var a = links[i];
         var href = '';
@@ -1160,13 +1190,39 @@
         try { title = a.getAttribute('title') || a.getAttribute('aria-label') || ''; } catch (e) {}
         if (!title) {
           try {
-            var r = a.closest && a.closest('ytd-compact-video-renderer');
+            var r = a.closest && a.closest(rendererSel);
             var t = r && r.querySelector('#video-title');
-            title = t ? (t.textContent || '').trim() : '';
+            if (t) {
+              try { title = t.getAttribute('title') || ''; } catch (e) {}
+              if (!title) title = (t.textContent || '').trim();
+            }
+          } catch (e) {}
+        }
+        if (!title) {
+          // Lockup title links carry the title as their text.
+          try {
+            var tx = (a.textContent || '').trim();
+            if (tx && tx.length <= 200) title = tx;
           } catch (e) {}
         }
         out.push({ id: id, title: title || id });
       }
+    }
+    try {
+      grab(document.querySelectorAll(
+        'ytd-playlist-panel-video-renderer a[href*="/watch?v="]'),
+        'ytd-playlist-panel-video-renderer');
+      grab(document.querySelectorAll(
+        'ytd-compact-video-renderer a[href*="/watch?v="], ' +
+        'ytd-compact-radio-renderer a[href*="/watch?v="]'),
+        'ytd-compact-video-renderer, ytd-compact-radio-renderer');
+      grab(document.querySelectorAll(
+        'yt-lockup-view-model a[href*="/watch?v="]'),
+        'yt-lockup-view-model');
+      grab(document.querySelectorAll(
+        'ytd-watch-next-secondary-results-renderer a[href*="/watch?v="]'),
+        'ytd-compact-video-renderer, yt-lockup-view-model, ' +
+        'ytd-playlist-panel-video-renderer');
     } catch (e) {}
     return out;
   }
@@ -1325,6 +1381,17 @@
           showToast(PREFS.tapToPause
             ? 'Tap screen to pause on — stock behaviour'
             : 'Tap screen to pause off — taps toggle the controls only', 2200);
+          renderPanel('main');
+        },
+      }));
+      panel.appendChild(panelRow('Resume After PiP / Fullscreen', PREFS.resumeOnExit ? 'On' : 'Off', {
+        pick: 'resume', active: PREFS.resumeOnExit,
+        onPick: function () {
+          PREFS.resumeOnExit = !PREFS.resumeOnExit;
+          savePrefs();
+          showToast(PREFS.resumeOnExit
+            ? 'Resume on: closing PiP or fullscreen keeps the video playing'
+            : 'Resume off: closing PiP or fullscreen pauses (stock)', 2200);
           renderPanel('main');
         },
       }));
@@ -1514,11 +1581,19 @@
     renderPanel('main');
     AUI.panelOpen = true;
     AUI.panel.style.display = 'block';
+    // Kurt (Nov 25): the lower-right buttons disappear while the
+    // menu is up — they sit right where the panel opens.
+    if (AUI.gearPill) {
+      AUI.gearPill.style.opacity = '0';
+      AUI.gearPill.style.visibility = 'hidden';
+    }
     if (AUI.hideTimer) { clearTimeout(AUI.hideTimer); AUI.hideTimer = null; }
   }
   function closePanel() {
     AUI.panelOpen = false;
     if (AUI.panel) AUI.panel.style.display = 'none';
+    // Bring the lower-right pill back with the rest of the chrome.
+    setChrome(AUI.visible);
   }
   function refreshPanel() {
     // Called by the caption/quality pipelines when their data lands;
@@ -1673,6 +1748,22 @@
     if (AUI.volBtn) AUI.volBtn.innerHTML = speakerSVG(muted ? 0 : vol);
   }
 
+  function onPresentationExit(v) {
+    if (!PREFS.resumeOnExit) return;
+    if (!v || v.ended) return;
+    var wasPlaying = !v.paused ||
+      (AUI.lastPlayingAt && Date.now() - AUI.lastPlayingAt < 1500);
+    if (!wasPlaying) return;
+    AUI.resumeGuardUntil = Date.now() + 800;
+    try { if (v.paused) v.play(); } catch (e) {}
+    setTimeout(function () {
+      if (PREFS.resumeOnExit && v.paused && !v.ended) {
+        try { v.play(); } catch (e) {}
+      }
+    }, 300);
+    log('resume-after-exit: keeping playback going');
+  }
+
   function setVolumeFromX(clientX) {
     var v = syncVideo();
     if (!v || !AUI.volTrack) return;
@@ -1792,6 +1883,7 @@
         updateTransport(); showUI();
       });
       playBtn.addEventListener('click', function (e) {
+        AUI.resumeGuardUntil = 0; // a deliberate pause always sticks
         try { e.stopPropagation(); } catch (err) {}
         var v = syncVideo(); if (!v) return;
         try { if (v.paused || v.ended) v.play(); else v.pause(); } catch (err) {}
@@ -1895,9 +1987,20 @@
       var panel = document.createElement('div');
       panel.id = 'ytnf-panel';
       panel.style.cssText = GLASS + FONT +
+        'touch-action:pan-y;' +
         'display:none;position:absolute;right:12px;bottom:84px;width:288px;max-width:86%;' +
         'max-height:62%;overflow:auto;border-radius:16px;padding:8px;pointer-events:auto;';
       panel.addEventListener('click', function (e) { try { e.stopPropagation(); } catch (err) {} });
+      // Kurt (Nov 25): swiping down on the menu dragged the whole
+      // player into the miniplayer — YouTube's drag-down gesture
+      // listens on the player, and the panel floats above it. The
+      // gesture dies at the panel: touch/pointer starts and moves
+      // never propagate past it, while touch-action:pan-y keeps
+      // the panel's own vertical scrolling working.
+      ['touchstart', 'touchmove', 'pointerdown'].forEach(function (type) {
+        panel.addEventListener(type, function (e) { try { e.stopPropagation(); } catch (err) {} });
+      });
+      try { panel.classList.add('ytnf-panel'); } catch (err) {}
       root.appendChild(panel);
 
       /* always-on hairline progress (PiP-style sliver) */
@@ -2131,6 +2234,28 @@
     });
     document.addEventListener('click', function (e) {
       if (!AUI.root) return; // overlay not mounted: stock YouTube behaviour
+      // Menu open? A tap anywhere outside the panel — elsewhere in
+      // the player or anywhere else on the page — puts the menu
+      // away (Kurt, Nov 25). The gear button is exempt: it toggles
+      // the panel itself. A dismissal tap on the video surface is
+      // consumed as the dismissal (chrome stays up, no toggle).
+      if (AUI.panelOpen) {
+        var pt = e && e.target;
+        var inPanel = !!(pt && typeof pt.closest === 'function' &&
+          (pt.closest('.ytnf-panel') || pt.closest('[data-act="menu"]')));
+        if (!inPanel) {
+          closePanel();
+          if (isVideoTapTarget(pt)) {
+            e.__ytnfTap = true;
+            if (!PREFS.tapToPause) {
+              try { e.stopPropagation(); } catch (err) {}
+              try { e.preventDefault(); } catch (err) {}
+            }
+            showUI();
+          }
+          return;
+        }
+      }
       if (!isVideoTapTarget(e && e.target)) return;
       // The tap toggles ONLY our UI. With tap-to-pause off (the
       // default) the click is also stopped here, in the capture

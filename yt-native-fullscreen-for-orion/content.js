@@ -1,5 +1,5 @@
 'use strict';
-/* YT Native Fullscreen for Orion v2.6.0 (Firefox MV2)
+/* YT Native Fullscreen for Orion v2.7.0 (Firefox MV2)
  *
  * v1.0: fullscreen a YouTube video -> iOS native player, via
  *   video.webkitEnterFullscreen() called synchronously in the tap.
@@ -1310,8 +1310,8 @@
           savePrefs();
           applyLayoutMode();
           showToast(PREFS.liquidGlass
-            ? 'Liquid Glass UI on — Apple-style layout'
-            : 'Liquid Glass UI off — classic layout', 2200);
+            ? 'Liquid Glass on'
+            : 'Liquid Glass off — classic glass', 2200);
           renderPanel('main');
         },
       }));
@@ -1611,11 +1611,17 @@
   function applyGlass(el, liquid, dark) {
     if (!el) return;
     if (liquid) {
+      // Dark liquid glass (Nov 25, Kurt's screenshot): the white
+      // sheen blew out over bright scenes and the white icons
+      // vanished into it. Every liquid element now sits on a dark
+      // tint — the live video still shows through the blur, but
+      // the chrome stays readable in any scene. The centre
+      // buttons (dark) go a shade deeper still.
       el.style.background = dark
-        ? 'linear-gradient(135deg,rgba(24,24,28,.52),rgba(24,24,28,.34) 55%,rgba(24,24,28,.26))'
-        : 'linear-gradient(135deg,rgba(255,255,255,.26),rgba(255,255,255,.11) 45%,rgba(255,255,255,.05))';
-      el.style.backdropFilter = 'blur(16px) saturate(180%) brightness(1.14)';
-      el.style.webkitBackdropFilter = 'blur(16px) saturate(180%) brightness(1.14)';
+        ? 'linear-gradient(135deg,rgba(255,255,255,.14),rgba(255,255,255,.03) 50%,rgba(255,255,255,.01)),linear-gradient(rgba(18,18,22,.55),rgba(18,18,22,.55))'
+        : 'linear-gradient(135deg,rgba(255,255,255,.20),rgba(255,255,255,.05) 45%,rgba(255,255,255,.02)),linear-gradient(rgba(22,22,27,.44),rgba(22,22,27,.44))';
+      el.style.backdropFilter = 'blur(16px) saturate(180%) brightness(1.05)';
+      el.style.webkitBackdropFilter = 'blur(16px) saturate(180%) brightness(1.05)';
       el.style.border = '1px solid rgba(255,255,255,.38)';
       el.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,.5),inset 0 -10px 18px rgba(255,255,255,.07),0 10px 32px rgba(0,0,0,.30)';
     } else {
@@ -1633,7 +1639,7 @@
       waves = '<path d="M15.5 9.8a3.2 3.2 0 0 1 0 4.4"/>';
       if (level >= 0.5) waves += '<path d="M18.2 7.2a7 7 0 0 1 0 9.6"/>';
     }
-    var slash = level <= 0 ? '<path d="M4.5 4.5l15 15" stroke="#ff6961"/>' : '';
+    var slash = level <= 0 ? '<path d="M4.5 4.5l15 15"/>' : '';
     return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" ' +
       'stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
       '<path d="M4 9.5v5h3.5L12 18.6V5.4L7.5 9.5H4z" fill="#fff" stroke="none"/>' +
@@ -1669,7 +1675,11 @@
   }
 
   function syncTopChrome() {
-    var show = AUI.mode === 'liquid' && !AUI.compact;
+    // v2.7: the pill layout is the layout in BOTH modes (Kurt:
+    // "bring the layout changes back to the original UI") — the
+    // toggle now switches only the glass. Hidden in the
+    // miniplayer, where there's no room for it.
+    var show = !AUI.compact;
     if (AUI.topBar) AUI.topBar.style.display = show ? 'flex' : 'none';
     if (AUI.gearPill) AUI.gearPill.style.display = show ? 'flex' : 'none';
   }
@@ -1679,10 +1689,20 @@
     AUI.mode = liquid ? 'liquid' : 'classic';
     if (!AUI.root || !AUI.bottom) return;
     var b = AUI.bottom;
+    // Permanent homes (v2.7, Kurt's order): upper left pill =
+    // Fullscreen, PiP, AirPlay; upper right = volume only;
+    // lower right pill = Miniplayer, Settings. The bottom bar
+    // carries only the times + scrubber in both modes.
+    if (AUI.topPillL) {
+      AUI.topPillL.appendChild(AUI.fsBtn);
+      AUI.topPillL.appendChild(AUI.pipBtn);
+      AUI.topPillL.appendChild(AUI.airplayBtn);
+    }
+    if (AUI.gearPill) {
+      AUI.gearPill.appendChild(AUI.miniBtn);
+      AUI.gearPill.appendChild(AUI.gearBtn);
+    }
     if (liquid) {
-      if (AUI.topPillL) { AUI.topPillL.appendChild(AUI.miniBtn); AUI.topPillL.appendChild(AUI.fsBtn); }
-      if (AUI.topPillR) { AUI.topPillR.appendChild(AUI.pipBtn); AUI.topPillR.appendChild(AUI.airplayBtn); }
-      if (AUI.gearPill) AUI.gearPill.appendChild(AUI.gearBtn);
       b.style.borderRadius = '999px';
       b.style.padding = '6px 16px';
       b.style.left = '10px'; b.style.right = '10px'; b.style.bottom = '10px';
@@ -1691,9 +1711,8 @@
       if (AUI.scrubKnob) { AUI.scrubKnob.style.width = '12px'; AUI.scrubKnob.style.height = '12px'; }
       if (AUI.tElapsed) AUI.tElapsed.style.fontSize = '12.5px';
       if (AUI.tRemain) AUI.tRemain.style.fontSize = '12.5px';
+      if (AUI.gearPill) AUI.gearPill.style.bottom = '82px';
     } else {
-      b.appendChild(AUI.gearBtn); b.appendChild(AUI.miniBtn);
-      b.appendChild(AUI.pipBtn); b.appendChild(AUI.fsBtn);
       b.style.borderRadius = '18px';
       b.style.padding = '8px 12px';
       b.style.left = '12px'; b.style.right = '12px'; b.style.bottom = '12px';
@@ -1702,6 +1721,7 @@
       if (AUI.scrubKnob) { AUI.scrubKnob.style.width = '15px'; AUI.scrubKnob.style.height = '15px'; }
       if (AUI.tElapsed) AUI.tElapsed.style.fontSize = '13px';
       if (AUI.tRemain) AUI.tRemain.style.fontSize = '13px';
+      if (AUI.gearPill) AUI.gearPill.style.bottom = '92px';
     }
     [AUI.bottom, AUI.panel, AUI.topPillL, AUI.topPillR, AUI.volPill, AUI.gearPill,
      AUI.gearBtn, AUI.miniBtn, AUI.pipBtn, AUI.fsBtn, AUI.airplayBtn, AUI.volBtn,
@@ -1946,7 +1966,7 @@
       volPill.appendChild(volBtn); volPill.appendChild(volTrack);
       var rightGroup = document.createElement('div');
       rightGroup.style.cssText = 'display:flex;align-items:center;gap:10px;pointer-events:none;';
-      rightGroup.appendChild(topPillR); rightGroup.appendChild(volPill);
+      rightGroup.appendChild(volPill);
       var topBar = document.createElement('div');
       topBar.style.cssText = 'position:absolute;left:12px;right:12px;top:10px;display:none;' +
         'justify-content:space-between;align-items:flex-start;pointer-events:none;' +

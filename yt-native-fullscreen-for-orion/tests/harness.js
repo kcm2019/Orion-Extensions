@@ -593,7 +593,7 @@ const okFetch = (env) => (u) => {
     }
     const mf = JSON.parse(fs.readFileSync(__dirname + '/../manifest.json', 'utf8'));
     assert.ok(mf.content_scripts[0].css.includes('player.css'), 'manifest loads player.css');
-    assert.strictEqual(mf.version, '2.6.0');
+    assert.strictEqual(mf.version, '2.7.0');
     console.log('PASS 16 reskin is paint-only, no YouTube control hidden or removed');
   }
 
@@ -742,8 +742,9 @@ const okFetch = (env) => (u) => {
     env.sandbox.document.querySelector = (sel) => (sel === '.ytp-miniplayer-button' ? mini : null);
     const root = env.player.children.find((c) => c.id === 'ytnf-apple');
     const order = findAll(root, (c) => c.dataset && c.dataset.act).map((c) => c.dataset.act);
-    assert.ok(order.indexOf('mini') > order.indexOf('menu') && order.indexOf('mini') < order.indexOf('fs'),
-      'mini button sits between gear and fullscreen: ' + order.join(','));
+    assert.ok(order.indexOf('fs') < order.indexOf('pip') &&
+      order.indexOf('mini') === order.indexOf('menu') - 1,
+      'v2.7 homes: FS before PiP (upper left), Miniplayer right before Settings (lower right): ' + order.join(','));
     findAll(root, (c) => c.dataset && c.dataset.act === 'mini')[0].click();
     assert.deepStrictEqual(mini.events, ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'],
       'miniplayer fired via full sequence: ' + mini.events.join(','));
@@ -973,8 +974,9 @@ const okFetch = (env) => (u) => {
     console.log('PASS 34 UI builds before the player response catches up');
   }
 
-  // 35. Liquid Glass toggle: controls move to the Apple layout
-  // (PiP + AirPlay top right, slim pill time bar, settings pill).
+  // 35. v2.7 layout: the pill arrangement is the layout in BOTH
+  // modes (upper left FS/PiP/AirPlay, upper right volume, lower
+  // right Miniplayer/Settings); the toggle switches only glass.
   {
     const video = makeVideo();
     const env = makeEnv({ video, playerResponse: captionPR([ytTrack('en', '', 'English')]) });
@@ -983,21 +985,25 @@ const okFetch = (env) => (u) => {
     await flush();
     const AUI = env.sandbox.window.__ytnfAUI;
     const root = env.player.children.find((c) => c.id === 'ytnf-apple');
-    assert.strictEqual(AUI.mode, 'classic', 'classic layout by default');
-    assert.ok(findAll(AUI.bottom, (c) => c.dataset && c.dataset.act === 'menu')[0], 'gear starts in the bottom bar');
+    assert.strictEqual(AUI.mode, 'classic', 'classic glass by default');
+    assert.deepStrictEqual(AUI.topPillL.children.map((c) => c.dataset.act),
+      ['fs', 'pip', 'airplay'], 'upper left: Fullscreen, PiP, AirPlay');
+    assert.deepStrictEqual(AUI.gearPill.children.map((c) => c.dataset.act),
+      ['mini', 'menu'], 'lower right: Miniplayer, Settings');
+    assert.ok(!findAll(AUI.bottom, (c) => c.dataset && ['fs', 'pip', 'airplay', 'mini', 'menu'].includes(c.dataset.act))[0],
+      'the time bar carries no buttons');
+    assert.strictEqual(AUI.topBar.style.display, 'flex', 'top bar shown in classic too');
+    assert.strictEqual(AUI.gearPill.style.bottom, '92px', 'lower-right pill clears the classic bar');
     findAll(root, (c) => c.dataset && c.dataset.act === 'menu')[0].click();
     findAll(root, (c) => c.dataset && c.dataset.pick === 'liquid')[0].click();
-    assert.strictEqual(AUI.mode, 'liquid', 'liquid mode on');
-    assert.ok(!findAll(AUI.bottom, (c) => c.dataset && c.dataset.act === 'menu')[0], 'gear left the bottom bar');
-    assert.ok(!findAll(AUI.bottom, (c) => c.dataset && c.dataset.act === 'pip')[0], 'PiP left the bottom bar');
-    assert.ok(findAll(AUI.topBar, (c) => c.dataset && c.dataset.act === 'pip')[0], 'PiP lives in the top bar');
-    assert.ok(findAll(AUI.topBar, (c) => c.dataset && c.dataset.act === 'airplay')[0], 'AirPlay lives in the top bar');
-    assert.ok(findAll(AUI.gearPill, (c) => c.dataset && c.dataset.act === 'menu')[0], 'settings sits in the pill above the time bar');
-    assert.strictEqual(AUI.topBar.style.display, 'flex', 'top bar shown in liquid mode');
-    assert.strictEqual(AUI.bottom.style.borderRadius, '999px', 'time bar is a slim pill');
+    assert.strictEqual(AUI.mode, 'liquid', 'liquid glass on');
+    assert.strictEqual(AUI.bottom.style.borderRadius, '999px', 'liquid time bar is a slim pill');
+    assert.strictEqual(AUI.gearPill.style.bottom, '82px', 'lower-right pill clears the liquid bar');
+    assert.deepStrictEqual(AUI.topPillL.children.map((c) => c.dataset.act),
+      ['fs', 'pip', 'airplay'], 'homes unchanged by the glass toggle');
     const saved = env.storageSetCalls.map((c) => c.ytnf_prefs).filter(Boolean).pop();
     assert.strictEqual(saved.liquidGlass, true, 'preference persisted');
-    console.log('PASS 35 liquid glass layout: controls re-homed Apple-style');
+    console.log('PASS 35 v2.7 layout: pills in both modes, toggle switches glass only');
   }
 
   // 36. Volume pill + AirPlay button drive the live element.
@@ -1021,7 +1027,8 @@ const okFetch = (env) => (u) => {
     console.log('PASS 36 volume pill + AirPlay drive the live element');
   }
 
-  // 37. Toggling Liquid Glass off restores the classic layout.
+  // 37. Toggling the glass off keeps the v2.7 layout; only the
+  // glass + bar shape revert to classic.
   {
     const video = makeVideo();
     const env = makeEnv({
@@ -1037,12 +1044,12 @@ const okFetch = (env) => (u) => {
     assert.strictEqual(AUI.mode, 'liquid', 'stored preference applies liquid at build');
     findAll(root, (c) => c.dataset && c.dataset.act === 'menu')[0].click();
     findAll(root, (c) => c.dataset && c.dataset.pick === 'liquid')[0].click();
-    assert.strictEqual(AUI.mode, 'classic', 'back to classic');
-    assert.ok(findAll(AUI.bottom, (c) => c.dataset && c.dataset.act === 'menu')[0], 'gear back in the bottom bar');
-    assert.ok(findAll(AUI.bottom, (c) => c.dataset && c.dataset.act === 'pip')[0], 'PiP back in the bottom bar');
-    assert.strictEqual(AUI.topBar.style.display, 'none', 'top bar hidden in classic');
+    assert.strictEqual(AUI.mode, 'classic', 'back to classic glass');
+    assert.strictEqual(AUI.topBar.style.display, 'flex', 'top bar stays — layout is permanent');
     assert.strictEqual(AUI.bottom.style.borderRadius, '18px', 'classic bar shape restored');
-    console.log('PASS 37 liquid glass off restores the classic layout');
+    assert.deepStrictEqual(AUI.gearPill.children.map((c) => c.dataset.act),
+      ['mini', 'menu'], 'lower-right pill keeps Miniplayer + Settings');
+    console.log('PASS 37 glass off: layout stays, classic glass restored');
   }
 
   console.log('ALL 37 TESTS PASS');

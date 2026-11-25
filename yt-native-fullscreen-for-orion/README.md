@@ -84,7 +84,19 @@ Firefox Manifest V2 extension for Orion on iPhone/iPad.
    refraction is native-only); off = the classic frosted glass.
    The AirPlay button calls WebKit's playback-target picker
    where available.
-8. **Miniplayer-restore fix + motion** (v2.10) — pausing in the
+8. **Centre tap + below-the-player UI** (v2.11) — with the
+   controls hidden, tapping the centre of the video (where the
+   play/pause button would be) toggles playback and brings the
+   UI up; taps elsewhere still only show the UI. The glass now
+   extends below the player: the description box and YouTube's
+   Queue box are glass panels too (paint-only CSS). Queue
+   ordering gets touch-first controls: our Queue page has
+   up/down buttons on every entry, and drags that start on a
+   Queue-box item's handle are translated into the drag events
+   YouTube's own mouse reorder listens for, so the reorder goes
+   through YouTube's model. (Also fixed: the centre cluster's
+   centring, which the v2.10 motion transform had overwritten.)
+9. **Miniplayer-restore fix + motion** (v2.10) — pausing in the
    miniplayer and restoring used to leave the play button dead:
    the controls were resolving a leftover video element. The
    player is now re-resolved from the document on every sync,
@@ -145,7 +157,7 @@ Notes / trade-offs:
 
 ## Install in Orion (iPhone / iPad)
 
-1. Download `yt-native-fullscreen-orion-2.10.0.zip` to your iPhone
+1. Download `yt-native-fullscreen-orion-2.11.0.zip` to your iPhone
    (Files → Downloads). **Don't unzip it.** The `.xpi` is the same
    package. If you installed v1.0/v1.1, remove that version first.
 2. Orion: **Settings → Extensions** → turn **Firefox extensions** on.
@@ -158,7 +170,7 @@ Notes / trade-offs:
    **Settings → Accessibility → Subtitles & Captioning →
    Closed Captions + SDH** is on.
 
-## On-device checks for v2.10.0
+## On-device checks for v2.11.0
 
 1. Open a video and tap it: the centre cluster appears (↺10,
    play/pause, 10↻) plus the glass bottom bar. Tap again to
@@ -200,7 +212,13 @@ Notes / trade-offs:
     video the centre pause button, ±10s skips and scrubber must
     all work immediately, the times must belong to the new video,
     and pausing must keep the UI up.
-11. **Miniplayer + theater + motion (v2.10)**: pause in the
+11. **Centre tap + queue touch (v2.11)**: let the controls
+    hide, then tap the middle of the video — it should pause
+    (and tap again to resume); the centre buttons must sit dead
+    centre. In our Queue page, reorder with the ↑/↓ buttons. In
+    YouTube's Queue box, drag an item by its left handle to
+    reorder. Check the description and Queue box wear the glass.
+12. **Miniplayer + theater + motion (v2.10)**: pause in the
     miniplayer, restore to full size — the centre play button
     must unpause first try. Open ⚙︎ → Theater Mode — the page
     must widen (and narrow again on a second pick). Watch the

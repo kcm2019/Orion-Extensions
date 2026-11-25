@@ -594,7 +594,7 @@ const okFetch = (env) => (u) => {
     }
     const mf = JSON.parse(fs.readFileSync(__dirname + '/../manifest.json', 'utf8'));
     assert.ok(mf.content_scripts[0].css.includes('player.css'), 'manifest loads player.css');
-    assert.strictEqual(mf.version, '2.10.0');
+    assert.strictEqual(mf.version, '2.11.0');
     console.log('PASS 16 reskin is paint-only, no YouTube control hidden or removed');
   }
 
@@ -1079,7 +1079,10 @@ const okFetch = (env) => (u) => {
       preventDefault() {},
       stopImmediatePropagation() { this.stopped = true; },
     });
-    const pd = (env.listeners.pointerdown || []).slice(-1)[0];
+    // Fire EVERY registered handler, like a real event travelling
+    // through all capture listeners (v2.11 added a second
+    // pointerdown listener for queue drags).
+    const pd = (ev) => (env.listeners.pointerdown || []).forEach((fn) => fn(ev));
     const ck = (env.listeners.click || []).slice(-1)[0];
     const evPd = mkEv(touchLayer); pd(evPd);
     assert.strictEqual(evPd.stopped, true, 'pointerdown on the touch layer is swallowed');
@@ -1276,6 +1279,8 @@ const okFetch = (env) => (u) => {
     ck(mkEv(videoTap));
     assert.strictEqual(AUI.visible, true, 'chrome shown');
     assert.strictEqual(AUI.bottom.style.transform, '', 'shown chrome has no drift offset');
+    assert.strictEqual(AUI.center.style.transform, 'translateY(-50%)',
+      'centre cluster keeps its centring transform when shown (v2.11 regression fix)');
     assert.ok(AUI.bottom.style.transition.includes('visibility 0s'), 'show flips visibility immediately');
     AUI.shownAt = Date.now() - 10000;
     AUI.lastActivity = Date.now() - 10000;
@@ -1283,6 +1288,8 @@ const okFetch = (env) => (u) => {
     assert.strictEqual(AUI.visible, false, 'chrome hidden');
     assert.strictEqual(AUI.bottom.style.opacity, '0', 'hidden chrome faded out');
     assert.strictEqual(AUI.bottom.style.transform, 'translateY(10px)', 'bottom bar drifts down as it hides');
+    assert.strictEqual(AUI.center.style.transform, 'translateY(-50%) scale(.93)',
+      'centre cluster hides around its centre, not its corner');
     assert.ok(AUI.bottom.style.transition.includes('linear'), 'hide delays the visibility flip until the fade ends');
     findAll(root, (c) => c.dataset && c.dataset.act === 'menu')[0].click();
     assert.strictEqual(AUI.panel.style.display, 'block', 'panel in layout on open');
@@ -1346,5 +1353,121 @@ const okFetch = (env) => (u) => {
     }
   }
 
-  console.log('ALL 44 TESTS PASS');
+  // 45. Centre tap (v2.11): with the UI hidden, a tap in the
+  // centre of the video — where the play/pause button would be —
+  // toggles playback and brings the UI up. Off-centre taps only
+  // bring the UI up.
+  {
+    const video = makeVideo();
+    video.paused = false;
+    const env = makeEnv({ video, playerResponse: captionPR([ytTrack('en', '', 'English')]) });
+    env.sandbox.fetch = okFetch(env);
+    vm.runInContext(src, env.sandbox);
+    await flush();
+    const AUI = env.sandbox.window.__ytnfAUI;
+    assert.strictEqual(AUI.visible, false, 'UI starts hidden');
+    const videoTap = { closest: (sel) => (sel.includes('#movie_player') ? {} : null) };
+    const fireClick = (x, y) => {
+      const ev = {
+        target: videoTap, clientX: x, clientY: y, stopped: false,
+        stopPropagation() { this.stopped = true; },
+        preventDefault() {},
+        stopImmediatePropagation() { this.stopped = true; },
+      };
+      (env.listeners.click || []).forEach((fn) => fn(ev));
+      return ev;
+    };
+    // Player stub rect is 1024x576 at 0,0: (512,288) is centre.
+    fireClick(512, 288);
+    assert.strictEqual(video.paused, true, 'centre tap paused the playing video');
+    assert.strictEqual(AUI.visible, true, 'centre tap brought the UI up');
+    AUI.shownAt = Date.now() - 10000;
+    AUI.lastActivity = Date.now() - 10000;
+    fireClick(20, 288); // off-centre tap dismisses the UI
+    assert.strictEqual(AUI.visible, false, 'UI hidden again');
+    assert.strictEqual(video.paused, true, 'off-centre tap did not change playback');
+    fireClick(20, 288); // off-centre with UI hidden: UI only
+    assert.strictEqual(AUI.visible, true, 'off-centre tap showed the UI');
+    assert.strictEqual(video.paused, true, 'off-centre tap did not unpause');
+    AUI.shownAt = Date.now() - 10000;
+    AUI.lastActivity = Date.now() - 10000;
+    fireClick(20, 288);
+    assert.strictEqual(AUI.visible, false, 'UI hidden once more');
+    fireClick(512, 288); // centre tap unpauses too
+    assert.strictEqual(video.paused, false, 'centre tap unpaused');
+    console.log('PASS 45 centre tap toggles play/pause while the UI is hidden');
+  }
+
+  // 46. Our queue reorders by touch (v2.11): up/down buttons on
+  // each queued row swap entries and persist.
+  {
+    const video = makeVideo();
+    const env = makeEnv({
+      video,
+      playerResponse: captionPR([ytTrack('en', '', 'English')]),
+      initialPrefs: {
+        quality: 'auto', speed: 1, captionLang: null,
+        queue: [{ id: 'qa', title: 'A' }, { id: 'qb', title: 'B' }, { id: 'qc', title: 'C' }],
+        autoplayNext: true,
+      },
+    });
+    env.sandbox.fetch = okFetch(env);
+    vm.runInContext(src, env.sandbox);
+    await flush();
+    const root = env.player.children.find((c) => c.id === 'ytnf-apple');
+    findAll(root, (c) => c.dataset && c.dataset.act === 'menu')[0].click();
+    findAll(root, (c) => c.dataset && c.dataset.page === 'queue')[0].click();
+    findAll(root, (c) => c.dataset && c.dataset.qdown === 'qa')[0].click();
+    let saved = env.storageSetCalls.map((c) => c.ytnf_prefs).filter(Boolean).pop();
+    assert.deepStrictEqual(saved.queue.map((q) => q.id), ['qb', 'qa', 'qc'], 'A moved down past B');
+    findAll(root, (c) => c.dataset && c.dataset.qup === 'qa')[0].click();
+    saved = env.storageSetCalls.map((c) => c.ytnf_prefs).filter(Boolean).pop();
+    assert.deepStrictEqual(saved.queue.map((q) => q.id), ['qa', 'qb', 'qc'], 'A moved back up');
+    console.log('PASS 46 our queue: touch up/down reordering');
+  }
+
+  // 47. Below-the-player glass (v2.11): player.css covers the
+  // Queue box + description and still obeys the paint-only rule.
+  {
+    const rawCss = fs.readFileSync(__dirname + '/../player.css', 'utf8');
+    const css = rawCss.replace(/\/\*[\s\S]*?\*\//g, ''); // rules only, not comments (same as test 16)
+    assert.ok(css.includes('ytd-playlist-panel-renderer'), 'queue box is glassed');
+    assert.ok(css.includes('#description'), 'description is glassed');
+    for (const bad of ['display:none', 'display: none', 'visibility:hidden', 'visibility: hidden', 'opacity:0;', 'opacity: 0;', 'pointer-events:none', 'pointer-events: none']) {
+      assert.ok(!css.includes(bad), 'player.css stays paint-only (found ' + bad + ')');
+    }
+    console.log('PASS 47 player.css: description + queue glass, paint-only intact');
+  }
+
+  // 48. Queue panel touch drag (v2.11): a handle-zone touch drag
+  // is translated into the drag events YouTube's reorder uses.
+  {
+    const video = makeVideo();
+    const env = makeEnv({ video, playerResponse: captionPR([ytTrack('en', '', 'English')]) });
+    env.sandbox.fetch = okFetch(env);
+    vm.runInContext(src, env.sandbox);
+    await flush();
+    env.sandbox.Event = class { constructor(type, opts) { this.type = type; Object.assign(this, opts || {}); } };
+    const mkItem = () => ({
+      _evs: [],
+      dispatchEvent(ev) { this._evs.push(ev.type); return true; },
+      closest(sel) { return String(sel).includes('ytd-playlist-panel-video-renderer') ? this : null; },
+      getBoundingClientRect: () => ({ left: 0, top: 0, width: 300, height: 60 }),
+    });
+    const itemA = mkItem();
+    const itemB = mkItem();
+    env.sandbox.document.elementFromPoint = () => itemB;
+    const fire = (type, ev) => (env.listeners[type] || []).forEach((fn) => fn(ev));
+    const base = { stopPropagation() {}, preventDefault() {} };
+    fire('pointerdown', Object.assign({ target: itemA, clientX: 10, clientY: 10 }, base));
+    fire('pointermove', Object.assign({ target: itemA, clientX: 12, clientY: 32 }, base));
+    assert.ok(itemA._evs.includes('dragstart'), 'dragstart fired on the dragged item');
+    assert.ok(itemB._evs.includes('dragover'), 'dragover fired on the item under the finger');
+    fire('pointerup', Object.assign({ target: itemB, clientX: 12, clientY: 32 }, base));
+    assert.ok(itemB._evs.includes('drop'), 'drop fired on the target item');
+    assert.ok(itemA._evs.includes('dragend'), 'dragend fired on the dragged item');
+    console.log('PASS 48 queue panel: touch drag translated to drag events');
+  }
+
+  console.log('ALL 48 TESTS PASS');
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });

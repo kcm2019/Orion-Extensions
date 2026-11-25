@@ -1,5 +1,5 @@
 'use strict';
-/* YT Native Fullscreen for Orion v2.10.0 (Firefox MV2)
+/* YT Native Fullscreen for Orion v2.11.0 (Firefox MV2)
  *
  * v1.0: fullscreen a YouTube video -> iOS native player, via
  *   video.webkitEnterFullscreen() called synchronously in the tap.
@@ -1071,12 +1071,17 @@
   // "visible" until the fade finishes (visibility flips on a
   // delay), so the fade-out is actually seen instead of the old
   // instant vanish.
-  function chromeHiddenTransform(el) {
-    if (el === AUI.center) return 'scale(.93)';
-    if (el === AUI.bottom) return 'translateY(10px)';
-    if (el === AUI.topBar) return 'translateY(-10px)';
-    if (el === AUI.gearPill) return 'translateY(10px) scale(.94)';
-    return '';
+  // Each element's RESTING transform matters: the centre cluster
+  // is centred with translateY(-50%), and the v2.10 motion code
+  // overwrote it with its scale — the cluster rendered
+  // half-a-height too low ("no longer centered", Kurt Nov 25).
+  // Shown/hidden transforms are now pairs that both keep it.
+  function chromeTransforms(el) {
+    if (el === AUI.center) return ['translateY(-50%)', 'translateY(-50%) scale(.93)'];
+    if (el === AUI.bottom) return ['', 'translateY(10px)'];
+    if (el === AUI.topBar) return ['', 'translateY(-10px)'];
+    if (el === AUI.gearPill) return ['', 'translateY(10px) scale(.94)'];
+    return ['', ''];
   }
   function applyChromeState(el, vis) {
     if (!el) return;
@@ -1085,7 +1090,8 @@
       : 'opacity .22s ease, transform .22s ease, visibility 0s linear .22s';
     el.style.opacity = vis ? '1' : '0';
     el.style.visibility = vis ? 'visible' : 'hidden';
-    el.style.transform = vis ? '' : chromeHiddenTransform(el);
+    var pair = chromeTransforms(el);
+    el.style.transform = vis ? pair[0] : pair[1];
   }
   function setChrome(vis) {
     [AUI.center, AUI.bottom, AUI.topBar, AUI.gearPill].forEach(function (el) {
@@ -1571,6 +1577,27 @@
             },
           });
           row.dataset.qplay = q.id;
+          // v2.11: touch-first reordering for our queue — big
+          // up/down targets instead of anything drag-based.
+          [['↑', 'qup', -1], ['↓', 'qdown', 1]].forEach(function (mv) {
+            if ((mv[2] < 0 && idx === 0) ||
+                (mv[2] > 0 && idx === PREFS.queue.length - 1)) return;
+            var mvBtn = document.createElement('span');
+            mvBtn.textContent = mv[0];
+            mvBtn.dataset[mv[1]] = q.id;
+            mvBtn.style.cssText = 'color:rgba(255,255,255,.8);padding:10px 9px;font-size:15px;flex:none;';
+            mvBtn.addEventListener('click', function (e) {
+              try { e.stopPropagation(); } catch (err) {}
+              var j = idx + mv[2];
+              if (j < 0 || j >= PREFS.queue.length) return;
+              var tmp = PREFS.queue[idx];
+              PREFS.queue[idx] = PREFS.queue[j];
+              PREFS.queue[j] = tmp;
+              savePrefs();
+              renderPanel('queue');
+            });
+            row.appendChild(mvBtn);
+          });
           var x = document.createElement('span');
           x.textContent = '✕';
           x.dataset.qremove = q.id;
@@ -1858,6 +1885,32 @@
     if (AUI.volBtn) AUI.volBtn.innerHTML = speakerSVG(muted ? 0 : vol);
   }
 
+  function togglePlayPause() {
+    AUI.resumeGuardUntil = 0; // a deliberate pause always sticks
+    var v = syncVideo(); if (!v) return;
+    var wantPlay = v.paused || v.ended;
+    try { if (wantPlay) v.play(); else v.pause(); } catch (err) {}
+    if (wantPlay) {
+      // v2.10: verify the play actually took. After a miniplayer
+      // pause + restore, element.play() can land on a player the
+      // miniplayer left in a held state — re-resolve the live
+      // element and retry, and if it's still stuck, go through
+      // YouTube's own player API (playVideo is the channel the
+      // miniplayer's own unpause button uses).
+      setTimeout(function () {
+        var lv = syncVideo();
+        if (!lv || !lv.paused || lv.ended) return;
+        try { lv.play(); } catch (err) {}
+        try {
+          var pl = findPlayer();
+          if (pl && typeof pl.playVideo === 'function') pl.playVideo();
+        } catch (err) {}
+        updateTransport();
+      }, 160);
+    }
+    updateTransport();
+  }
+
   function onPresentationExit(v) {
     if (!PREFS.resumeOnExit) return;
     if (!v || v.ended) return;
@@ -1993,31 +2046,9 @@
         updateTransport(); showUI();
       });
       playBtn.addEventListener('click', function (e) {
-        AUI.resumeGuardUntil = 0; // a deliberate pause always sticks
         try { e.stopPropagation(); } catch (err) {}
-        var v = syncVideo(); if (!v) return;
-        var wantPlay = v.paused || v.ended;
-        try { if (wantPlay) v.play(); else v.pause(); } catch (err) {}
-        if (wantPlay) {
-          // v2.10: verify the play actually took. After a
-          // miniplayer pause + restore, element.play() can land
-          // on a player the miniplayer left in a held state —
-          // re-resolve the live element and retry, and if it's
-          // still stuck, go through YouTube's own player API
-          // (playVideo is the channel the miniplayer's own
-          // unpause button uses).
-          setTimeout(function () {
-            var lv = syncVideo();
-            if (!lv || !lv.paused || lv.ended) return;
-            try { lv.play(); } catch (err) {}
-            try {
-              var pl = findPlayer();
-              if (pl && typeof pl.playVideo === 'function') pl.playVideo();
-            } catch (err) {}
-            updateTransport();
-          }, 160);
-        }
-        updateTransport(); showUI();
+        togglePlayPause();
+        showUI();
       });
       fwdBtn.addEventListener('click', function (e) {
         try { e.stopPropagation(); } catch (err) {}
@@ -2326,6 +2357,7 @@
 
       player.appendChild(root);
       wireTapToggle();
+      wireQueueTouchDrag();
       try { if (player.classList) player.classList.add('ytnf-on'); } catch (e) {}
       injectChromeHideStyle();
       updateTransport();
@@ -2357,6 +2389,17 @@
     if (!t.closest('#movie_player, .html5-video-player')) return false;
     if (t.closest(YT_INTERACTIVE)) return false;
     return true;
+  }
+  function isCenterTap(e) {
+    if (!e || typeof e.clientX !== 'number' || typeof e.clientY !== 'number') return false;
+    var p = AUI.player;
+    if (!p || typeof p.getBoundingClientRect !== 'function') return false;
+    var r = null;
+    try { r = p.getBoundingClientRect(); } catch (err) {}
+    if (!r || !r.width || !r.height) return false;
+    var fx = (e.clientX - r.left) / r.width;
+    var fy = (e.clientY - r.top) / r.height;
+    return fx >= 0.36 && fx <= 0.64 && fy >= 0.30 && fy <= 0.70;
   }
   function wireTapToggle() {
     if (tapWired) return;
@@ -2399,6 +2442,20 @@
         }
       }
       if (!isVideoTapTarget(e && e.target)) return;
+      // v2.11 (Kurt): with the UI hidden, a tap in the CENTRE of
+      // the video — where the play/pause button would be — acts
+      // as that button: it toggles playback (and brings the UI up
+      // for feedback). Taps elsewhere just bring the UI up, as
+      // before. Only when tap-to-pause is off; with it on,
+      // YouTube's stock tap behaviour owns every tap.
+      if (!AUI.visible && !PREFS.tapToPause && isCenterTap(e)) {
+        e.__ytnfTap = true;
+        try { e.stopPropagation(); } catch (err) {}
+        try { e.preventDefault(); } catch (err) {}
+        togglePlayPause();
+        showUI();
+        return;
+      }
       // The tap toggles ONLY our UI. With tap-to-pause off (the
       // default) the click is also stopped here, in the capture
       // phase, before YouTube's own handlers can pause; with it
@@ -2432,6 +2489,89 @@
         'to{opacity:1;transform:translateY(0)}}';
       (document.head || document.documentElement).appendChild(st);
     } catch (e) {}
+  }
+
+  /* ---------------- queue panel touch drag (v2.11) ----------------
+   * YouTube's Queue box reorders by mouse drag on the item's
+   * handle — HTML5 drag events, which touch never produces, so
+   * on a touchscreen the order is effectively frozen (Kurt).
+   * This translates a handle-zone touch drag into the drag
+   * events YouTube's own reorder handler listens for
+   * (dragstart / dragover / drop / dragend with a DataTransfer),
+   * so the reorder goes through YouTube's own model. Drags must
+   * start on the left handle zone of an item; the rest of the
+   * item still taps and scrolls normally. */
+  var qdWired = false;
+  var qd = null;
+  function makeDataTransfer() {
+    var data = {};
+    return {
+      setData: function (k, v) { data[k] = String(v); },
+      getData: function (k) { return data[k] || ''; },
+      clearData: function () { data = {}; },
+      types: [], files: [], items: [],
+      dropEffect: 'move', effectAllowed: 'move',
+      setDragImage: function () {},
+    };
+  }
+  function fireDrag(el, type, e, dt) {
+    try {
+      var ev = null;
+      if (typeof DragEvent === 'function') {
+        ev = new DragEvent(type, { bubbles: true, cancelable: true, clientX: e.clientX, clientY: e.clientY });
+      } else if (typeof Event === 'function') {
+        ev = new Event(type, { bubbles: true, cancelable: true });
+      } else return;
+      try { ev.dataTransfer = dt; } catch (err) {}
+      try { Object.defineProperty(ev, 'dataTransfer', { value: dt }); } catch (err) {}
+      el.dispatchEvent(ev);
+    } catch (err) {}
+  }
+  function wireQueueTouchDrag() {
+    if (qdWired) return;
+    qdWired = true;
+    document.addEventListener('pointerdown', function (e) {
+      var t = e && e.target;
+      if (!t || typeof t.closest !== 'function') return;
+      var item = null;
+      try { item = t.closest('ytd-playlist-panel-video-renderer'); } catch (err) {}
+      if (!item) return;
+      var rect = null;
+      try { rect = item.getBoundingClientRect(); } catch (err) {}
+      if (!rect) return;
+      var onHandle = false;
+      try { onHandle = !!t.closest('[class*="drag"], [id*="drag"]'); } catch (err) {}
+      if (!onHandle && e.clientX - rect.left > 48) return;
+      qd = { item: item, x: e.clientX, y: e.clientY, active: false, over: null, dt: null };
+    }, true);
+    document.addEventListener('pointermove', function (e) {
+      if (!qd) return;
+      if (!qd.active) {
+        if (Math.abs(e.clientY - qd.y) < 9 && Math.abs(e.clientX - qd.x) < 9) return;
+        qd.active = true;
+        qd.dt = makeDataTransfer();
+        fireDrag(qd.item, 'dragstart', e, qd.dt);
+      }
+      var over = null;
+      try {
+        var el = document.elementFromPoint && document.elementFromPoint(e.clientX, e.clientY);
+        if (el && typeof el.closest === 'function') {
+          over = el.closest('ytd-playlist-panel-video-renderer');
+        }
+      } catch (err) {}
+      if (over) { qd.over = over; fireDrag(over, 'dragover', e, qd.dt); }
+      try { e.preventDefault(); } catch (err) {}
+    }, true);
+    function endDrag(e, cancelled) {
+      if (!qd) return;
+      if (qd.active) {
+        if (!cancelled && qd.over) fireDrag(qd.over, 'drop', e, qd.dt);
+        fireDrag(qd.item, 'dragend', e, qd.dt);
+      }
+      qd = null;
+    }
+    document.addEventListener('pointerup', function (e) { endDrag(e, false); }, true);
+    document.addEventListener('pointercancel', function (e) { endDrag(e, true); }, true);
   }
 
   /* ================================================================

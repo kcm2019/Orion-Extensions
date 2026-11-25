@@ -1,4 +1,37 @@
-# Beautiful Reader for Orion — v1.20.3
+# Beautiful Reader for Orion — v1.21.0
+
+## What's new in v1.21.0
+
+Social media sites are excluded by default
+(Kurt's ask). A new popup toggle, "Skip Social
+Media Sites" — in the extension icon menu, ON by
+default — covers YouTube, Twitter/X, Reddit,
+Instagram, Facebook, TikTok, Threads, LinkedIn,
+Snapchat, Pinterest, Twitch and Bluesky, including
+their subdomains (m.youtube.com, old.reddit.com).
+
+While it is on, those sites get no reader pill and
+no auto-open — not via the per-site Always Use
+Reader list and not via the All Sites toggle. The
+exclusion is total, not cosmetic: detection never
+runs there, the fast-draw extraction cache is
+dropped, and the wall race / sanctuary auto-open
+paths stand down too. Deliberate manual open from
+the popup's Reader Mode toggle still works — the
+hard "never" tool remains the blocklist (YouTube
+stays on that seeded list as well, so it is doubly
+covered). The popup shows a short note when the
+current tab is a covered social site. Turn the
+toggle off and social sites behave like any other
+site again.
+
+New suite e2e-social.js (21 checks): host matcher
+(subdomains, lookalike domains), no pill / no
+auto-open on Reddit and m.youtube.com under
+defaults and under All Sites, release when the
+toggle is off, and the popup toggle + note wiring.
+Full battery 41 suites green.
+
 
 ## What's new in v1.20.3
 

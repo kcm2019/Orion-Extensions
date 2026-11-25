@@ -96,6 +96,10 @@
     var blocked = isBlocked(P.tabHost);
     el('blocked-row').hidden = !blocked;
     el('blocked-note').hidden = !blocked;
+    // Social media exclusion (v1.21.0): note only —
+    // unlike the blocklist it disables nothing, since
+    // Reader Mode above stays available by hand.
+    el('social-note').hidden = !(P.settings && P.settings.socialBlock !== false && C.isSocialHost(P.tabHost));
     // The block list overrides the force-enable toggle
     // and the per-site auto-open switch (Kurt's spec).
     el('reader-toggle').disabled = blocked;
@@ -198,6 +202,7 @@
   function renderDefaults() {
     var s = P.settings;
     el('all-toggle').checked = !!s.autoAll;
+    el('social-toggle').checked = s.socialBlock !== false;
     el('set-follow').checked = !!s.followSystem;
     el('set-wallbreaker').checked = s.wallBreaker !== false;
     var themePairs = Object.keys(C.THEMES).map(function (k) { return [k, C.THEMES[k].label]; });
@@ -225,6 +230,7 @@
       if (ev.target.checked) addSite(P.tabHost); else removeSite(P.tabHost);
     });
     el('all-toggle').addEventListener('change', function (ev) { setSetting('autoAll', ev.target.checked); });
+    el('social-toggle').addEventListener('change', function (ev) { setSetting('socialBlock', ev.target.checked); renderBlocked(); });
     el('list-head').addEventListener('click', function () {
       P.ui.listCollapsed = !(P.ui && P.ui.listCollapsed);
       storageSet(K.ui, P.ui);

@@ -50,8 +50,29 @@
     translateAuto: false, // v1.19.0: auto-translate on open when the article is in another language
     hideCitations: false, // v1.20.0: hide in-text citation chips ([12]) for clean reading; the reference list stays
     autoAll: false, // v1.18.5: auto-open the reader on ANY site with a detected article (popup toggle)
+    socialBlock: true, // v1.21.0: social media sites are excluded by default — no pill, no auto-open there (popup toggle, ON by default)
     pillPos: null // {side:'left'|'right', top:number}
   };
+
+  // Social media platforms excluded by default
+  // (v1.21.0, Kurt's ask): the reader pill never
+  // appears on these hosts and the reader never
+  // auto-opens there — not via the per-site list and
+  // not via All Sites — while settings.socialBlock is
+  // on. Deliberate manual open from the popup still
+  // works; the hard "never" tool remains the
+  // blocklist. Suffix-matched like the blocklist, so
+  // youtube.com also covers m.youtube.com.
+  var SOCIAL_HOSTS = ['youtube.com', 'twitter.com', 'x.com', 'reddit.com', 'instagram.com', 'facebook.com', 'tiktok.com', 'threads.net', 'linkedin.com', 'snapchat.com', 'pinterest.com', 'twitch.tv', 'bsky.app'];
+
+  function isSocialHost(host) {
+    if (!host) return false;
+    for (var i = 0; i < SOCIAL_HOSTS.length; i++) {
+      var e = SOCIAL_HOSTS[i];
+      if (host === e || host.slice(-(e.length + 1)) === '.' + e) return true;
+    }
+    return false;
+  }
 
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
 
@@ -697,6 +718,8 @@
     imageIdentity: imageIdentity,
     looksLikeFilename: looksLikeFilename,
     isUiJunk: isUiJunk,
+    SOCIAL_HOSTS: SOCIAL_HOSTS,
+    isSocialHost: isSocialHost,
     isTickerLine: isTickerLine,
     isNavLabel: isNavLabel,
     splitCaptionCredit: splitCaptionCredit,

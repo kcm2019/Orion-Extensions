@@ -4838,6 +4838,7 @@
   // immune to the wall's blanking fallback.
   function earlyExtract() {
     if (S.detected || S.open) return;
+    if (socialExcluded()) return; // v1.21.0: no extraction at all on excluded social hosts
     if (C.isHomepagePath(location.pathname)) return;
     try {
       var art = extractArticle(document, location.href);
@@ -4852,6 +4853,7 @@
   // already in hand. Returns true when it opened.
   function raceOpenCheck() {
     if (S.open || S.dismissed || S.raceOpened) return false;
+    if (socialExcluded()) return false; // v1.21.0: the wall race is an auto-open too
     if (!S.settings || !S.detected || !S.detected.readable) return false;
     if (S.settings.wallBreaker === false) return false;
     if (!pageHostile()) return false;
@@ -4878,6 +4880,7 @@
   // page's scripts have nothing left to fight.
   function sanctuaryCheck() {
     if (S.open || S.dismissed || S.sanctuaryOpened) return false;
+    if (socialExcluded()) return false; // v1.21.0: sanctuary is an auto-open too
     var asked = false;
     try { asked = sessionStorage.getItem('br_sanctuary') === '1'; } catch (e) {}
     if (!asked) return false;
@@ -4980,8 +4983,19 @@
     return false;
   }
 
+  // Social media exclusion (v1.21.0): while
+  // settings.socialBlock is on (the default), social
+  // hosts get no detection at all — no pill, and no
+  // auto-open via the per-site list or All Sites.
+  // Manual open from the popup still works; this
+  // gates detection only, not openReader.
+  function socialExcluded() {
+    return !!S.settings && S.settings.socialBlock !== false && C.isSocialHost(S.host);
+  }
+
   function detectAndMaybeAuto(upgrade) {
     if (isBlockedHost(S.host)) return;
+    if (socialExcluded()) return;
     if (S.dismissed || S.open) return;
     if (C.isHomepagePath(location.pathname)) return; // homepages are indexes, not articles
     var art = S.detected || null;
@@ -5056,6 +5070,11 @@
       storageGet(K.history, null), storageGet(K.translations, {}), storageGet(K.blocklist, null)
     ]).then(function (vals) {
       S.settings = vals[0] || JSON.parse(JSON.stringify(C.DEFAULT_SETTINGS));
+      // v1.21.0: earlyExtract ran before settings
+      // resolved (fast draw); on an excluded social
+      // host, drop its cache so nothing can open from
+      // it — the exclusion is total, not just no-pill.
+      if (socialExcluded()) S.detected = null;
       S.perSite = vals[1] || {}; S.autoSites = vals[2] || [];
       // Global blocklist (v1.20.1): sites where the reader
       // never activates. Seeded ONCE with youtube.com and

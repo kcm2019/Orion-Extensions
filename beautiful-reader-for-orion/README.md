@@ -1,4 +1,45 @@
-# Beautiful Reader for Orion — v1.20.2
+# Beautiful Reader for Orion — v1.20.3
+
+## What's new in v1.20.3
+
+AP News (and every Brightspot-CMS site) fixed.
+Kurt's report on an AP investigation: "All of the
+many links on the site gets captured above the
+article text." Reproduced on the real page and
+measured: the extractor's winning candidate was
+the page HEADER wrapper — it holds ~394 teaser and
+nav <p>s, and the scoring formula's uncapped
+paragraph bonus (paras x 120) let that wrapper,
+at 89% link density, outscore the actual <main>
+52,577 to 26,856. Its 269-link section nav became
+the reader's first two blocks; the article also
+reported readable: false (link density 0.888).
+
+Five fixes, all general:
+- The paragraph bonus in scoreCandidate saturates
+  at 40 paragraphs; beyond that, text mass decides.
+- A candidate over 0.6 link density is furniture
+  by definition and is disqualified outright.
+- Lists whose items are >=75% link text are
+  skipped (navigation, link rails); reference
+  lists exempt. List blocks also dedupe now — the
+  AP nav appeared twice.
+- A short paragraph or loose run that is entirely
+  one link is a link card, not prose (AP threads
+  related-story headlines through the body).
+- "promo" now matches as a substring in the skip
+  check: camelCase classes like Brightspot's
+  PagePromo defeated the separator-bounded pattern,
+  so promo cards (thumbnail + headline) walked in.
+  They now skip as a unit.
+
+Verified on the real AP page (archived snapshot):
+the reader now opens on the lede, link density
+0.015, readable, no nav, no promo headlines, story
+intact at 1,662 words. New regression suite
+e2e-apnews.js (9 checks) replicates the template;
+full battery 40 suites green.
+
 
 ## What's new in v1.20.2
 

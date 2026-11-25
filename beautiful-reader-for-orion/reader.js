@@ -406,6 +406,14 @@
     if (node.id && node.id.indexOf('br-') === 0) return true;
     var cls = (node.getAttribute && (node.getAttribute('class') || '')) + ' ' + (node.id || '');
     if (SKIP_RE.test(cls)) return true;
+    // CamelCase defeats SKIP_RE's separator boundaries:
+    // Brightspot's "PagePromo" / "PagePromo-title" carry
+    // no dash before Promo, so AP's related-story promo
+    // cards walked straight in (v1.20.3). A class that
+    // contains "promo" anywhere is promotional furniture
+    // with very high probability — skip it as a unit,
+    // thumbnail and headline together.
+    if (/promo/i.test(cls)) return true;
     if (node.getAttribute && node.getAttribute('aria-hidden') === 'true') return true;
     // A site's own table-of-contents container: the reader
     // builds its own TOC from the headings, so the in-page
@@ -833,6 +841,17 @@
       loose = []; brRun = 0;
       var t = cleanText(textOfExcludingSkips(holder));
       if (t.length < 40 || t === titleText || C.isUiJunk(t)) return;
+      // Same link-card rule as the <p> branch (v1.20.3):
+      // a short loose run that is entirely link text is
+      // a promo/related headline, not prose.
+      if (t.length < 160) {
+        var hLinks = holder.querySelectorAll('a');
+        if (hLinks.length) {
+          var hLinkText = 0;
+          for (var hl = 0; hl < hLinks.length; hl++) hLinkText += cleanText(hLinks[hl].textContent).length;
+          if (hLinkText >= t.length * 0.95) return;
+        }
+      }
       var pb = { type: 'paragraph', text: t };
       var ph = inlineHtml(holder, baseUrl);
       if (ph.hasLink || ph.hasRich) pb.html = ph.html;
@@ -951,10 +970,24 @@
         }
         var pt = cleanText(textOfExcludingSkips(child));
         if (pt.length >= 2) {
-          var pb = { type: 'paragraph', text: pt };
-          var ph = inlineHtml(child, baseUrl);
-          if (ph.hasLink || ph.hasRich) pb.html = ph.html;
-          pushTextBlock(blocks, seen, pb);
+          // A short paragraph that is entirely one link
+          // is a link card, not prose (v1.20.3): AP
+          // threads related-story headlines and "Key
+          // takeaways" lines through the story body as
+          // <p><a>headline</a></p>. Real paragraphs
+          // carry their links inside sentences.
+          var pLinks = child.querySelectorAll('a');
+          var linkCard = false;
+          if (pLinks.length === 1 && pt.length < 160) {
+            var lt = cleanText(pLinks[0].textContent);
+            if (lt.length >= pt.length * 0.95) linkCard = true;
+          }
+          if (!linkCard) {
+            var pb = { type: 'paragraph', text: pt };
+            var ph = inlineHtml(child, baseUrl);
+            if (ph.hasLink || ph.hasRich) pb.html = ph.html;
+            pushTextBlock(blocks, seen, pb);
+          }
         }
       } else if (tag === 'img') {
         pushImage(child, blocks, baseUrl, '');
@@ -993,13 +1026,16 @@
           }
         }
       } else if (tag === 'ul' || tag === 'ol') {
-        var items = [], itemsHtml = [], anyHtml = false;
+        var items = [], itemsHtml = [], anyHtml = false, itemTextLen = 0, itemLinkLen = 0;
         var lis = child.children;
         for (var li = 0; li < lis.length; li++) {
           if (lis[li].tagName === 'LI') {
             var it = cleanText(textOfExcludingSkips(lis[li]));
             if (it && !C.isUiJunk(it)) {
               items.push(it);
+              itemTextLen += it.length;
+              var liLinks = lis[li].querySelectorAll('a');
+              for (var lq = 0; lq < liLinks.length; lq++) itemLinkLen += cleanText(liLinks[lq].textContent).length;
               var lh = inlineHtml(lis[li], baseUrl);
               itemsHtml.push((lh.hasLink || lh.hasRich) ? lh.html : '');
               if (lh.hasLink || lh.hasRich) anyHtml = true;
@@ -1014,7 +1050,16 @@
           // end list is reference matter, not body text.
           if (child.classList && (child.classList.contains('references') || child.classList.contains('reflist'))) lb.references = true;
           else if (child.parentElement && child.parentElement.classList && child.parentElement.classList.contains('reflist')) lb.references = true;
-          blocks.push(lb);
+          // A list whose items are mostly link text is
+          // navigation or a link rail, not article
+          // content (v1.20.3) — AP's section nav is a
+          // 269-link <ul> that used to land at the top
+          // of the reader, twice. Reference lists are
+          // exempt (their items are citation text), and
+          // list blocks now dedupe like text blocks.
+          var linkFarm = !lb.references && itemTextLen > 0 && itemLinkLen >= itemTextLen * 0.75;
+          var lkey = 'list:' + items.join(' ').slice(0, 140).toLowerCase();
+          if (!linkFarm && !seen[lkey]) { seen[lkey] = 1; blocks.push(lb); }
         }
       } else if (tag === 'video' || tag === 'audio') {
         var mB = mediaBlock(child, baseUrl);
@@ -1196,6 +1241,12 @@
       // Legal/consent text is dense, link-free prose — it must never
       // outscore the article. A candidate dominated by it is a notice.
       if (st.boilerRatio > 0.35) continue;
+      // A container whose text is mostly link text is
+      // furniture by definition — navigation, a link
+      // farm, a listing rail (v1.20.3; AP's header
+      // wrapper measures 0.89). It can never be the
+      // article, whatever its raw text mass says.
+      if (st.linkDensity > 0.6) continue;
       var score = C.scoreCandidate(st);
       // The semantic article container, or one holding the headline,
       // wins ties against stray text-heavy widgets.

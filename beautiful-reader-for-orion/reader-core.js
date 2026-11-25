@@ -163,7 +163,13 @@
     var paras = stats.paragraphCount || 0;
     var linkDensity = stats.linkDensity || 0;
     if (paras === 0) return 0;
-    return textLength * (1 - linkDensity) + paras * 120;
+    // The paragraph bonus saturates at 40 (v1.20.3): AP's
+    // header wrapper holds ~394 teaser/nav <p>s, and the
+    // uncapped bonus let that link farm outscore the
+    // actual article 52k to 27k. Forty paragraphs of
+    // bonus is all a real article needs to beat
+    // furniture; beyond it, text mass decides.
+    return textLength * (1 - linkDensity) + Math.min(paras, 40) * 120;
   }
 
   function sanitizeUrl(url, base) {

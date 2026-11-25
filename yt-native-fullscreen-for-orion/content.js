@@ -1,5 +1,5 @@
 'use strict';
-/* YT Native Fullscreen for Orion v2.11.0 (Firefox MV2)
+/* YT Native Fullscreen for Orion v2.12.0 (Firefox MV2)
  *
  * v1.0: fullscreen a YouTube video -> iOS native player, via
  *   video.webkitEnterFullscreen() called synchronously in the tap.
@@ -2358,6 +2358,7 @@
       player.appendChild(root);
       wireTapToggle();
       wireQueueTouchDrag();
+      ensureBelowPlayerGlass();
       try { if (player.classList) player.classList.add('ytnf-on'); } catch (e) {}
       injectChromeHideStyle();
       updateTransport();
@@ -2573,6 +2574,84 @@
     document.addEventListener('pointerup', function (e) { endDrag(e, false); }, true);
     document.addEventListener('pointercancel', function (e) { endDrag(e, true); }, true);
   }
+
+  /* ---------------- below-the-player glass (v2.12) ----------------
+   * v2.11 tried to glass the Queue box and the description from
+   * player.css alone, and on-device NEITHER ever applied (Kurt).
+   * Live inspection of a watch page (Nov 25) showed why: the
+   * description box is a #description element inside
+   * ytd-watch-metadata's SHADOW ROOT — page CSS cannot select
+   * into a shadow tree at all — and the queue panel's paint is
+   * governed from inside ytd-playlist-panel-renderer's own
+   * shadow tree. So the glass now goes in from here: a <style>
+   * injected INTO each component's shadow root (the one place
+   * that can reach the elements painting those boxes), plus
+   * inline styles on the panel host as a second layer. A slow
+   * re-check re-applies it whenever YouTube rebuilds the nodes. */
+  var BELOW_GLASS = {
+    panel:
+      ':host { background: rgba(22,22,27,.55) !important;' +
+      ' -webkit-backdrop-filter: blur(20px) saturate(180%);' +
+      ' backdrop-filter: blur(20px) saturate(180%);' +
+      ' border: 1px solid rgba(255,255,255,.12) !important;' +
+      ' border-radius: 16px !important; }' +
+      ' #container, #items, #header { background: transparent !important; }',
+    metadata:
+      '#description { background: rgba(28,28,32,.5) !important;' +
+      ' -webkit-backdrop-filter: blur(16px) saturate(170%);' +
+      ' backdrop-filter: blur(16px) saturate(170%);' +
+      ' border: 1px solid rgba(255,255,255,.09) !important;' +
+      ' border-radius: 12px !important; }' +
+      ' ytd-text-inline-expander { background: transparent !important; }' +
+      ' #title h1 { font-weight: 600; letter-spacing: -.01em; }',
+  };
+  function injectShadowGlass(host, cssText) {
+    if (!host) return false;
+    var root = null;
+    try { root = host.shadowRoot; } catch (err) {}
+    if (!root || typeof root.appendChild !== 'function') return false;
+    try {
+      if (typeof root.querySelector === 'function' &&
+          root.querySelector('style[data-ytnf-glass]')) return true;
+    } catch (err) {}
+    if (root.children) {
+      for (var i = 0; i < root.children.length; i++) {
+        if (root.children[i] && root.children[i].__ytnfGlass) return true;
+      }
+    }
+    try {
+      var st = document.createElement('style');
+      try { st.setAttribute('data-ytnf-glass', '1'); } catch (err) {}
+      st.__ytnfGlass = true;
+      st.textContent = cssText;
+      root.appendChild(st);
+      return true;
+    } catch (err) { return false; }
+  }
+  function styleBelowPlayer() {
+    try {
+      var panel = document.querySelector('ytd-playlist-panel-renderer');
+      if (panel) {
+        try {
+          panel.style.background = 'rgba(22,22,27,.55)';
+          panel.style.backdropFilter = 'blur(20px) saturate(180%)';
+          panel.style.webkitBackdropFilter = 'blur(20px) saturate(180%)';
+          panel.style.border = '1px solid rgba(255,255,255,.12)';
+          panel.style.borderRadius = '16px';
+        } catch (err) {}
+        injectShadowGlass(panel, BELOW_GLASS.panel);
+      }
+      var meta = document.querySelector('ytd-watch-metadata');
+      if (meta) injectShadowGlass(meta, BELOW_GLASS.metadata);
+    } catch (err) {}
+  }
+  var belowGlassTimer = null;
+  function ensureBelowPlayerGlass() {
+    styleBelowPlayer();
+    if (belowGlassTimer) return;
+    try { belowGlassTimer = setInterval(styleBelowPlayer, 2500); } catch (err) {}
+  }
+  try { window.__ytnfStyleBelow = styleBelowPlayer; } catch (err) {}
 
   /* ================================================================
    * Watch-page setup / navigation

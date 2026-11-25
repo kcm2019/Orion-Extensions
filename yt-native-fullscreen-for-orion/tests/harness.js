@@ -594,7 +594,7 @@ const okFetch = (env) => (u) => {
     }
     const mf = JSON.parse(fs.readFileSync(__dirname + '/../manifest.json', 'utf8'));
     assert.ok(mf.content_scripts[0].css.includes('player.css'), 'manifest loads player.css');
-    assert.strictEqual(mf.version, '2.11.0');
+    assert.strictEqual(mf.version, '2.12.0');
     console.log('PASS 16 reskin is paint-only, no YouTube control hidden or removed');
   }
 
@@ -1469,5 +1469,46 @@ const okFetch = (env) => (u) => {
     console.log('PASS 48 queue panel: touch drag translated to drag events');
   }
 
-  console.log('ALL 48 TESTS PASS');
+  // 49. Below-player glass (v2.12): the description lives inside
+  // ytd-watch-metadata's shadow root, unreachable from page CSS —
+  // the glass style must be injected INTO the shadow roots, and
+  // re-applying must not duplicate it.
+  {
+    const video = makeVideo();
+    const env = makeEnv({ video, playerResponse: captionPR([ytTrack('en', '', 'English')]) });
+    env.sandbox.fetch = okFetch(env);
+    vm.runInContext(src, env.sandbox);
+    await flush();
+    const mkShadow = () => ({
+      children: [],
+      appendChild(c) { this.children.push(c); return c; },
+      querySelector(sel) {
+        if (String(sel).includes('data-ytnf-glass')) {
+          return this.children.find((c) => c.__ytnfGlass) || null;
+        }
+        return null;
+      },
+    });
+    const panelHost = { shadowRoot: mkShadow(), style: {} };
+    const metaHost = { shadowRoot: mkShadow(), style: {} };
+    const doc = env.sandbox.document;
+    const origQS = doc.querySelector.bind(doc);
+    doc.querySelector = (sel) => {
+      if (sel === 'ytd-playlist-panel-renderer') return panelHost;
+      if (sel === 'ytd-watch-metadata') return metaHost;
+      return origQS(sel);
+    };
+    env.sandbox.window.__ytnfStyleBelow();
+    assert.ok(panelHost.shadowRoot.children.some((c) => String(c.textContent || '').includes(':host')),
+      'panel shadow glass injected');
+    assert.ok(metaHost.shadowRoot.children.some((c) => String(c.textContent || '').includes('#description')),
+      'description shadow glass injected');
+    assert.strictEqual(panelHost.style.background, 'rgba(22,22,27,.55)', 'panel host inline glass set');
+    env.sandbox.window.__ytnfStyleBelow();
+    assert.strictEqual(panelHost.shadowRoot.children.length, 1, 'no duplicate panel style');
+    assert.strictEqual(metaHost.shadowRoot.children.length, 1, 'no duplicate metadata style');
+    console.log('PASS 49 below-player glass injected into shadow roots');
+  }
+
+  console.log('ALL 49 TESTS PASS');
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });

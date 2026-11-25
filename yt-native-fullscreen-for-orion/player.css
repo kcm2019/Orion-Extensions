@@ -284,10 +284,10 @@ ytd-playlist-panel-video-renderer {
   transition: background-color 0.15s ease;
 }
 ytd-playlist-panel-video-renderer:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.07) !important;
 }
 ytd-playlist-panel-video-renderer[selected] {
-  background: rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.09) !important;
   border-radius: 10px;
 }
 ytd-watch-metadata #description.ytd-watch-metadata {

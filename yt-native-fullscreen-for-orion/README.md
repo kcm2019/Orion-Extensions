@@ -84,7 +84,16 @@ Firefox Manifest V2 extension for Orion on iPhone/iPad.
    refraction is native-only); off = the classic frosted glass.
    The AirPlay button calls WebKit's playback-target picker
    where available.
-8. **Centre tap + below-the-player UI** (v2.11) — with the
+8. **Below-the-player glass, applied from inside** (v2.12) —
+   v2.11 styled the description and Queue box from the
+   stylesheet, but the description lives inside
+   ytd-watch-metadata's shadow DOM, which page CSS cannot
+   reach, so it never applied. The extension now injects the
+   glass stylesheet directly into the shadow roots of the
+   metadata and queue-panel components (plus inline styles on
+   the panel host) and re-applies it as YouTube rebuilds the
+   page.
+9. **Centre tap + below-the-player UI** (v2.11) — with the
    controls hidden, tapping the centre of the video (where the
    play/pause button would be) toggles playback and brings the
    UI up; taps elsewhere still only show the UI. The glass now
@@ -157,7 +166,7 @@ Notes / trade-offs:
 
 ## Install in Orion (iPhone / iPad)
 
-1. Download `yt-native-fullscreen-orion-2.11.0.zip` to your iPhone
+1. Download `yt-native-fullscreen-orion-2.12.0.zip` to your iPhone
    (Files → Downloads). **Don't unzip it.** The `.xpi` is the same
    package. If you installed v1.0/v1.1, remove that version first.
 2. Orion: **Settings → Extensions** → turn **Firefox extensions** on.
@@ -170,7 +179,7 @@ Notes / trade-offs:
    **Settings → Accessibility → Subtitles & Captioning →
    Closed Captions + SDH** is on.
 
-## On-device checks for v2.11.0
+## On-device checks for v2.12.0
 
 1. Open a video and tap it: the centre cluster appears (↺10,
    play/pause, 10↻) plus the glass bottom bar. Tap again to
@@ -212,7 +221,11 @@ Notes / trade-offs:
     video the centre pause button, ±10s skips and scrubber must
     all work immediately, the times must belong to the new video,
     and pausing must keep the UI up.
-11. **Centre tap + queue touch (v2.11)**: let the controls
+11. **Below the player (v2.12)**: the description box and the
+    Queue box should now actually wear the glass — translucent,
+    blurred, hairline border. Expand the description and
+    collapse/reopen the queue to confirm it survives both.
+12. **Centre tap + queue touch (v2.11)**: let the controls
     hide, then tap the middle of the video — it should pause
     (and tap again to resume); the centre buttons must sit dead
     centre. In our Queue page, reorder with the ↑/↓ buttons. In

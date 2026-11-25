@@ -84,7 +84,22 @@ Firefox Manifest V2 extension for Orion on iPhone/iPad.
    refraction is native-only); off = the classic frosted glass.
    The AirPlay button calls WebKit's playback-target picker
    where available.
-8. **Panel behaviour** (v2.9) — while the settings menu is open
+8. **Miniplayer-restore fix + motion** (v2.10) — pausing in the
+   miniplayer and restoring used to leave the play button dead:
+   the controls were resolving a leftover video element. The
+   player is now re-resolved from the document on every sync,
+   restoring from the miniplayer re-syncs immediately, and the
+   play button verifies its play took — escalating to a fresh
+   element retry and YouTube's own playVideo() API if not.
+   Theater Mode gets the same verify-and-fallback treatment
+   (size-button click, verified, then YouTube's 't' shortcut).
+   Motion: the chrome fades and drifts (centre cluster scales
+   in, bars slide from their edges, visibility flips only after
+   the fade), and the settings menu rises in with its rows
+   cascading, then fades out. The PiP button uses Apple's
+   pip.enter glyph and the fullscreen button is a drawn SVG
+   with strokes matching the other icons.
+9. **Panel behaviour** (v2.9) — while the settings menu is open
    the lower-right button pill hides; tapping anywhere outside
    the menu (in the player or elsewhere on the page) dismisses
    it; and touch gestures that start on the menu are stopped at
@@ -130,7 +145,7 @@ Notes / trade-offs:
 
 ## Install in Orion (iPhone / iPad)
 
-1. Download `yt-native-fullscreen-orion-2.9.0.zip` to your iPhone
+1. Download `yt-native-fullscreen-orion-2.10.0.zip` to your iPhone
    (Files → Downloads). **Don't unzip it.** The `.xpi` is the same
    package. If you installed v1.0/v1.1, remove that version first.
 2. Orion: **Settings → Extensions** → turn **Firefox extensions** on.
@@ -143,7 +158,7 @@ Notes / trade-offs:
    **Settings → Accessibility → Subtitles & Captioning →
    Closed Captions + SDH** is on.
 
-## On-device checks for v2.9.0
+## On-device checks for v2.10.0
 
 1. Open a video and tap it: the centre cluster appears (↺10,
    play/pause, 10↻) plus the glass bottom bar. Tap again to
@@ -185,7 +200,14 @@ Notes / trade-offs:
     video the centre pause button, ±10s skips and scrubber must
     all work immediately, the times must belong to the new video,
     and pausing must keep the UI up.
-11. **Menu + queue + resume (v2.9)**: open ⚙︎ — the
+11. **Miniplayer + theater + motion (v2.10)**: pause in the
+    miniplayer, restore to full size — the centre play button
+    must unpause first try. Open ⚙︎ → Theater Mode — the page
+    must widen (and narrow again on a second pick). Watch the
+    chrome and menu animate in/out; check the PiP icon matches
+    Apple's and the fullscreen corners look as heavy as the
+    other icons.
+12. **Menu + queue + resume (v2.9)**: open ⚙︎ — the
     Miniplayer/Settings pill should vanish; tap the video — the
     menu closes and the controls stay up; swipe down on the menu
     — the player must NOT drop into the miniplayer. Watching

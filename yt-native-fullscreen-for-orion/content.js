@@ -1,5 +1,5 @@
 'use strict';
-/* YT Native Fullscreen for Orion v2.9.0 (Firefox MV2)
+/* YT Native Fullscreen for Orion v2.10.0 (Firefox MV2)
  *
  * v1.0: fullscreen a YouTube video -> iOS native player, via
  *   video.webkitEnterFullscreen() called synchronously in the tap.
@@ -970,6 +970,45 @@
     } catch (e) {}
   }
 
+  function pressKeyT() {
+    try {
+      if (typeof KeyboardEvent !== 'function') return false;
+      var opts = { key: 't', code: 'KeyT', keyCode: 84, which: 84, bubbles: true, cancelable: true };
+      var target = document.body || document;
+      ['keydown', 'keypress', 'keyup'].forEach(function (t) {
+        target.dispatchEvent(new KeyboardEvent(t, opts));
+      });
+      return true;
+    } catch (e) { return false; }
+  }
+  function theaterIsOn() {
+    try {
+      var f = document.querySelector('ytd-watch-flexy');
+      if (f && typeof f.hasAttribute === 'function') return f.hasAttribute('theater');
+    } catch (e) {}
+    return false;
+  }
+  function toggleTheater() {
+    // v2.10 (Kurt: "theatre mode doesn't work either"): the
+    // proxied size-button click didn't take on his build. Click
+    // it, VERIFY the theater state actually flipped, and if it
+    // didn't, use YouTube's own 't' shortcut — the same trick
+    // that backs up the miniplayer button. If neither lands, say
+    // so instead of failing silently.
+    var was = theaterIsOn();
+    clickYtButton(['.ytp-size-button']);
+    setTimeout(function () {
+      if (theaterIsOn() !== was) return;
+      pressKeyT();
+      setTimeout(function () {
+        if (theaterIsOn() === was) {
+          showToast('Theater Mode did not respond on this page', 2400);
+        }
+      }, 350);
+    }, 250);
+    return true;
+  }
+
   function clickYtButton(selectors) {
     for (var i = 0; i < selectors.length; i++) {
       var b = null;
@@ -1026,12 +1065,31 @@
     if (AUI.tRemain) AUI.tRemain.textContent = isFinite(dur) ? '-' + fmtTime(dur - ct) : 'LIVE';
   }
 
+  // Chrome motion (v2.10, Kurt's ask): elements fade AND drift —
+  // the centre cluster scales up out of a slight shrink, the bars
+  // slide a few px from their edges. Hiding keeps the element
+  // "visible" until the fade finishes (visibility flips on a
+  // delay), so the fade-out is actually seen instead of the old
+  // instant vanish.
+  function chromeHiddenTransform(el) {
+    if (el === AUI.center) return 'scale(.93)';
+    if (el === AUI.bottom) return 'translateY(10px)';
+    if (el === AUI.topBar) return 'translateY(-10px)';
+    if (el === AUI.gearPill) return 'translateY(10px) scale(.94)';
+    return '';
+  }
+  function applyChromeState(el, vis) {
+    if (!el) return;
+    el.style.transition = vis
+      ? 'opacity .26s ease, transform .3s cubic-bezier(.2,.9,.3,1.15), visibility 0s'
+      : 'opacity .22s ease, transform .22s ease, visibility 0s linear .22s';
+    el.style.opacity = vis ? '1' : '0';
+    el.style.visibility = vis ? 'visible' : 'hidden';
+    el.style.transform = vis ? '' : chromeHiddenTransform(el);
+  }
   function setChrome(vis) {
     [AUI.center, AUI.bottom, AUI.topBar, AUI.gearPill].forEach(function (el) {
-      if (el) {
-        el.style.opacity = vis ? '1' : '0';
-        el.style.visibility = vis ? 'visible' : 'hidden';
-      }
+      applyChromeState(el, vis);
     });
   }
   function showUI() {
@@ -1150,7 +1208,16 @@
   function syncVideo() {
     var v = null;
     try {
-      var p = AUI.player || findPlayer();
+      // v2.10: re-resolve #movie_player from the document EVERY
+      // time. The miniplayer cycle relocates/rebuilds player
+      // internals; the element captured at build time can end up
+      // pointing at a leftover shell whose <video> is not the one
+      // on screen — which is exactly how the play button went
+      // dead after pausing in the miniplayer and restoring
+      // (Kurt, Nov 25): it faithfully played a detached element.
+      var fresh = findPlayer();
+      if (fresh) AUI.player = fresh;
+      var p = AUI.player;
       if (p && p.querySelector) v = p.querySelector('video.html5-main-video, video');
     } catch (e) {}
     if (!v) v = findVideo();
@@ -1423,6 +1490,7 @@
               closePanel(); hideUI();
               beginProxySession();
               if (a[3]) fireRealClick(a[3]);
+              else if (a[1] === 'theater') toggleTheater();
               else clickYtButton(a[2]);
             },
           }));
@@ -1569,7 +1637,17 @@
         }));
       }
     }
-  }
+  
+    // v2.10: rows cascade in — a short fade/rise, staggered a
+    // few ms per row, capped so long pages (Queue) don't drag.
+    try {
+      var kids = panel.children || [];
+      for (var ri = 0; ri < kids.length; ri++) {
+        kids[ri].style.animation = 'ytnfRowIn .28s cubic-bezier(.2,.8,.3,1) both';
+        kids[ri].style.animationDelay = Math.min(ri * 16, 160) + 'ms';
+      }
+    } catch (e) {}
+}
   function clickYtDetect(sel) {
     var b = null;
     try { b = document.querySelector(sel); } catch (e) {}
@@ -1580,18 +1658,43 @@
     if (!AUI.panel) return;
     renderPanel('main');
     AUI.panelOpen = true;
+    // v2.10 menu animation: rise + settle from just below its
+    // resting spot, fading in. The starting state is applied with
+    // transitions off, then the end state a frame later.
+    var token = (AUI.panelAnim = (AUI.panelAnim || 0) + 1);
     AUI.panel.style.display = 'block';
+    AUI.panel.style.pointerEvents = 'auto';
+    AUI.panel.style.transition = 'none';
+    AUI.panel.style.opacity = '0';
+    AUI.panel.style.transform = 'translateY(12px) scale(.96)';
+    setTimeout(function () {
+      if (!AUI.panelOpen || AUI.panelAnim !== token) return;
+      AUI.panel.style.transition =
+        'opacity .2s ease, transform .26s cubic-bezier(.2,.9,.3,1.1)';
+      AUI.panel.style.opacity = '1';
+      AUI.panel.style.transform = 'translateY(0) scale(1)';
+    }, 20);
     // Kurt (Nov 25): the lower-right buttons disappear while the
     // menu is up — they sit right where the panel opens.
-    if (AUI.gearPill) {
-      AUI.gearPill.style.opacity = '0';
-      AUI.gearPill.style.visibility = 'hidden';
-    }
+    applyChromeState(AUI.gearPill, false);
     if (AUI.hideTimer) { clearTimeout(AUI.hideTimer); AUI.hideTimer = null; }
   }
   function closePanel() {
     AUI.panelOpen = false;
-    if (AUI.panel) AUI.panel.style.display = 'none';
+    if (AUI.panel) {
+      // Fade/slide out, then take it out of layout once the
+      // motion is done (unless it was reopened in the meantime).
+      var token = (AUI.panelAnim = (AUI.panelAnim || 0) + 1);
+      AUI.panel.style.pointerEvents = 'none';
+      AUI.panel.style.transition =
+        'opacity .18s ease, transform .18s ease';
+      AUI.panel.style.opacity = '0';
+      AUI.panel.style.transform = 'translateY(8px) scale(.97)';
+      var p = AUI.panel;
+      setTimeout(function () {
+        if (!AUI.panelOpen && AUI.panelAnim === token) p.style.display = 'none';
+      }, 190);
+    }
     // Bring the lower-right pill back with the rest of the chrome.
     setChrome(AUI.visible);
   }
@@ -1679,6 +1782,13 @@
       if (AUI.gearBtn) AUI.gearBtn.style.display = '';
       if (AUI.miniBtn) AUI.miniBtn.style.display = '';
       if (AUI.tRemain) AUI.tRemain.style.display = '';
+      // v2.10: this branch runs only on the compact -> full
+      // transition, i.e. the moment the miniplayer restores.
+      // Re-resolve the live element right away so the transport
+      // (and its paused state) is correct from the first frame
+      // back, not up to a second later at the next poll.
+      syncVideo();
+      updateTransport();
     }
     log('layout:', compact ? 'compact (miniplayer)' : 'full', w + 'px');
   }
@@ -1886,7 +1996,27 @@
         AUI.resumeGuardUntil = 0; // a deliberate pause always sticks
         try { e.stopPropagation(); } catch (err) {}
         var v = syncVideo(); if (!v) return;
-        try { if (v.paused || v.ended) v.play(); else v.pause(); } catch (err) {}
+        var wantPlay = v.paused || v.ended;
+        try { if (wantPlay) v.play(); else v.pause(); } catch (err) {}
+        if (wantPlay) {
+          // v2.10: verify the play actually took. After a
+          // miniplayer pause + restore, element.play() can land
+          // on a player the miniplayer left in a held state —
+          // re-resolve the live element and retry, and if it's
+          // still stuck, go through YouTube's own player API
+          // (playVideo is the channel the miniplayer's own
+          // unpause button uses).
+          setTimeout(function () {
+            var lv = syncVideo();
+            if (!lv || !lv.paused || lv.ended) return;
+            try { lv.play(); } catch (err) {}
+            try {
+              var pl = findPlayer();
+              if (pl && typeof pl.playVideo === 'function') pl.playVideo();
+            } catch (err) {}
+            updateTransport();
+          }, 160);
+        }
         updateTransport(); showUI();
       });
       fwdBtn.addEventListener('click', function (e) {
@@ -1939,7 +2069,15 @@
         '<path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>';
       gearBtn.dataset.act = 'menu';
       gearBtn.title = 'Settings';
-      var fsBtn = circleBtn(44, 18, '⛶');
+      var fsBtn = circleBtn(44, 0, '');
+      fsBtn.innerHTML =
+        // Drawn corners instead of the ⛶ text glyph (Kurt,
+        // Nov 25): the glyph rendered hairline-thin next to the
+        // other icons; 2.3px strokes match their weight.
+        '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#fff" ' +
+        'stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<path d="M8.5 3.8H5A1.2 1.2 0 0 0 3.8 5v3.5M15.5 3.8H19A1.2 1.2 0 0 1 20.2 5v3.5' +
+        'M8.5 20.2H5A1.2 1.2 0 0 1 3.8 19v-3.5M15.5 20.2H19a1.2 1.2 0 0 0 1.2-1.2v-3.5"/></svg>';
       fsBtn.dataset.act = 'fs';
       fsBtn.title = 'Full screen (native player)';
       gearBtn.addEventListener('click', function (e) {
@@ -1962,11 +2100,14 @@
       });
       var pipBtn = circleBtn(44, 0, '');
       pipBtn.innerHTML =
-        '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#fff" ' +
-        'stroke-width="2" stroke-linecap="round" aria-hidden="true">' +
-        '<rect x="2.5" y="4.5" width="19" height="15" rx="3.5"/>' +
-        '<rect x="11" y="10.5" width="8" height="6" rx="1.4" fill="#fff" stroke="none"/>' +
-        '<path d="M8.6 8.6 5.2 5.2M5.4 9.2v-4h4" stroke-width="1.8"/></svg>';
+        // Apple's pip.enter glyph (Kurt, Nov 25): wide rounded
+        // outline, small filled window bottom-right, and the
+        // arrow in the upper left pointing INTO the small window.
+        '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" ' +
+        'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<rect x="2" y="5.5" width="20" height="13" rx="3"/>' +
+        '<rect x="13" y="11.5" width="6.5" height="4.8" rx="1.3" fill="#fff" stroke="none"/>' +
+        '<path d="M5.6 8.2 10.4 13M7.2 13h3.2V9.8" stroke-width="1.7"/></svg>';
       pipBtn.dataset.act = 'pip';
       pipBtn.title = 'Picture in Picture';
       pipBtn.addEventListener('click', function (e) {
@@ -1989,7 +2130,8 @@
       panel.style.cssText = GLASS + FONT +
         'touch-action:pan-y;' +
         'display:none;position:absolute;right:12px;bottom:84px;width:288px;max-width:86%;' +
-        'max-height:62%;overflow:auto;border-radius:16px;padding:8px;pointer-events:auto;';
+        'max-height:62%;overflow:auto;border-radius:16px;padding:8px;pointer-events:auto;' +
+        'transform-origin:bottom right;opacity:0;';
       panel.addEventListener('click', function (e) { try { e.stopPropagation(); } catch (err) {} });
       // Kurt (Nov 25): swiping down on the menu dragged the whole
       // player into the miniplayer — YouTube's drag-down gesture
@@ -2285,7 +2427,9 @@
         '#movie_player.ytnf-on .ytp-chrome-top,' +
         '#movie_player.ytnf-on .ytp-gradient-bottom,' +
         '#movie_player.ytnf-on .ytp-gradient-top,' +
-        '#movie_player.ytnf-on .ytp-large-play-button{display:none!important}';
+        '#movie_player.ytnf-on .ytp-large-play-button{display:none!important}' +
+        '@keyframes ytnfRowIn{from{opacity:0;transform:translateY(5px)}' +
+        'to{opacity:1;transform:translateY(0)}}';
       (document.head || document.documentElement).appendChild(st);
     } catch (e) {}
   }

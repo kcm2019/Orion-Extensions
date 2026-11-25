@@ -594,7 +594,7 @@ const okFetch = (env) => (u) => {
     }
     const mf = JSON.parse(fs.readFileSync(__dirname + '/../manifest.json', 'utf8'));
     assert.ok(mf.content_scripts[0].css.includes('player.css'), 'manifest loads player.css');
-    assert.strictEqual(mf.version, '2.9.0');
+    assert.strictEqual(mf.version, '2.10.0');
     console.log('PASS 16 reskin is paint-only, no YouTube control hidden or removed');
   }
 
@@ -1217,5 +1217,134 @@ const okFetch = (env) => (u) => {
     console.log('PASS 41 resume-after-exit: PiP/fullscreen exits resume, toggle disables');
   }
 
-  console.log('ALL 41 TESTS PASS');
+  const sleep = (ms) => new Promise((r) => RealSetTimeout(r, ms));
+
+  // 42. Miniplayer-restore unpause (v2.10): if the element our
+  // controls resolve to is a held leftover, the play button
+  // escalates — fresh re-resolve, then YouTube's own playVideo()
+  // API (the channel the miniplayer's unpause uses). And when
+  // the player query starts returning the real element again,
+  // syncVideo adopts it immediately.
+  {
+    const stale = makeVideo();
+    stale.paused = true;
+    stale.play = function () { this.playCalls = (this.playCalls || 0) + 1; /* detached: never unpauses */ };
+    const env = makeEnv({ video: stale, playerResponse: captionPR([ytTrack('en', '', 'English')]) });
+    env.sandbox.fetch = okFetch(env);
+    vm.runInContext(src, env.sandbox);
+    await flush();
+    const AUI = env.sandbox.window.__ytnfAUI;
+    const root = env.player.children.find((c) => c.id === 'ytnf-apple');
+    const fresh = makeVideo();
+    fresh.paused = true; // paused in the miniplayer
+    env.player.querySelector = () => stale; // scoped query still hits the leftover
+    env.player.playVideo = function () { fresh.paused = false; };
+    findAll(root, (c) => c.dataset && c.dataset.act === 'play')[0].click();
+    await sleep(260);
+    assert.strictEqual(fresh.paused, false, 'escalation unpaused the real video via the player API');
+    // Restore: the player query now returns the real element.
+    env.player.querySelector = () => fresh;
+    fresh.paused = true;
+    findAll(root, (c) => c.dataset && c.dataset.act === 'play')[0].click();
+    assert.strictEqual(fresh.paused, false, 'after restore the play button drives the live element directly');
+    assert.strictEqual(AUI.syncVideo(), fresh, 'syncVideo adopted the fresh element');
+    console.log('PASS 42 miniplayer-restore unpause: fresh resolve + API escalation');
+  }
+
+  // 43. Motion (v2.10): chrome fades with a drift and a delayed
+  // visibility flip; the panel rises in and fades out before
+  // leaving layout; icons are the new Apple PiP + thick-stroke
+  // fullscreen SVGs.
+  {
+    const video = makeVideo();
+    const env = makeEnv({ video, playerResponse: captionPR([ytTrack('en', '', 'English')]) });
+    env.sandbox.fetch = okFetch(env);
+    vm.runInContext(src, env.sandbox);
+    await flush();
+    const AUI = env.sandbox.window.__ytnfAUI;
+    const root = env.player.children.find((c) => c.id === 'ytnf-apple');
+    assert.ok(AUI.fsBtn.innerHTML.includes('stroke-width="2.3"'), 'fullscreen icon has the thicker strokes');
+    assert.ok(AUI.pipBtn.innerHTML.includes('M5.6 8.2'), 'PiP icon is Apple pip.enter (arrow into the window)');
+    const ck = (env.listeners.click || []).slice(-1)[0];
+    const videoTap = { closest: (sel) => (sel.includes('#movie_player') ? {} : null) };
+    const mkEv = (t) => ({
+      target: t, stopped: false,
+      stopPropagation() { this.stopped = true; },
+      preventDefault() {},
+      stopImmediatePropagation() { this.stopped = true; },
+    });
+    ck(mkEv(videoTap));
+    assert.strictEqual(AUI.visible, true, 'chrome shown');
+    assert.strictEqual(AUI.bottom.style.transform, '', 'shown chrome has no drift offset');
+    assert.ok(AUI.bottom.style.transition.includes('visibility 0s'), 'show flips visibility immediately');
+    AUI.shownAt = Date.now() - 10000;
+    AUI.lastActivity = Date.now() - 10000;
+    ck(mkEv(videoTap));
+    assert.strictEqual(AUI.visible, false, 'chrome hidden');
+    assert.strictEqual(AUI.bottom.style.opacity, '0', 'hidden chrome faded out');
+    assert.strictEqual(AUI.bottom.style.transform, 'translateY(10px)', 'bottom bar drifts down as it hides');
+    assert.ok(AUI.bottom.style.transition.includes('linear'), 'hide delays the visibility flip until the fade ends');
+    findAll(root, (c) => c.dataset && c.dataset.act === 'menu')[0].click();
+    assert.strictEqual(AUI.panel.style.display, 'block', 'panel in layout on open');
+    await flush(); await flush();
+    assert.strictEqual(AUI.panel.style.opacity, '1', 'panel faded in');
+    assert.strictEqual(AUI.panel.style.transform, 'translateY(0) scale(1)', 'panel settled into place');
+    ck(mkEv(videoTap));
+    assert.strictEqual(AUI.panelOpen, false, 'panel dismissed');
+    assert.strictEqual(AUI.panel.style.opacity, '0', 'panel fading out');
+    assert.strictEqual(AUI.panel.style.pointerEvents, 'none', 'panel stops eating taps while it fades');
+    await sleep(260);
+    assert.strictEqual(AUI.panel.style.display, 'none', 'panel leaves layout after the fade');
+    console.log('PASS 43 motion: chrome fade/drift, panel rise + fade, new icons');
+  }
+
+  // 44. Theater Mode (v2.10): the proxied size-button click is
+  // verified; if the state didn't flip, YouTube's 't' shortcut
+  // fires as the fallback channel. If the click works, no key.
+  {
+    const mkTheaterEnv = async (clickWorks) => {
+      const video = makeVideo();
+      const env = makeEnv({ video, playerResponse: captionPR([ytTrack('en', '', 'English')]) });
+      env.sandbox.fetch = okFetch(env);
+      vm.runInContext(src, env.sandbox);
+      await flush();
+      const state = { on: false };
+      const sizeBtn = {
+        events: [],
+        dispatchEvent(ev) { this.events.push(ev.type); if (ev.type === 'click' && clickWorks) state.on = true; return true; },
+        click() { this.events.push('bare-click'); if (clickWorks) state.on = true; },
+      };
+      const flexy = { hasAttribute: (a) => (a === 'theater' ? state.on : false) };
+      env.sandbox.document.querySelector = (sel) =>
+        (sel === '.ytp-size-button' ? sizeBtn : (sel === 'ytd-watch-flexy' ? flexy : null));
+      env.sandbox.KeyboardEvent = class { constructor(type, opts) { this.type = type; this.opts = opts; } };
+      return { env, state, sizeBtn };
+    };
+    // Case A: the button click does nothing -> 't' fallback fires.
+    {
+      const { env } = await mkTheaterEnv(false);
+      const root = env.player.children.find((c) => c.id === 'ytnf-apple');
+      findAll(root, (c) => c.dataset && c.dataset.act === 'menu')[0].click();
+      const row = findAll(root, (c) => c.dataset && c.dataset.action === 'theater')[0];
+      assert.ok(row, 'theater row offered');
+      row.click();
+      await sleep(320);
+      const keys = (env.sandbox.document.body._dispatched || []).filter((e) => e.type === 'keydown');
+      assert.ok(keys.some((e) => e.opts && e.opts.key === 't'), "'t' shortcut fired after the dead click");
+      console.log('PASS 44a theater: dead button click falls back to the t shortcut');
+    }
+    // Case B: the click flips theater -> no fallback key.
+    {
+      const { env } = await mkTheaterEnv(true);
+      const root = env.player.children.find((c) => c.id === 'ytnf-apple');
+      findAll(root, (c) => c.dataset && c.dataset.act === 'menu')[0].click();
+      findAll(root, (c) => c.dataset && c.dataset.action === 'theater')[0].click();
+      await sleep(320);
+      const keys = (env.sandbox.document.body._dispatched || []).filter((e) => e.type === 'keydown');
+      assert.ok(!keys.some((e) => e.opts && e.opts.key === 't'), 'no fallback key when the click works');
+      console.log('PASS 44b theater: working click needs no fallback');
+    }
+  }
+
+  console.log('ALL 44 TESTS PASS');
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });

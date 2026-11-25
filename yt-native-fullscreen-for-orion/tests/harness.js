@@ -593,7 +593,7 @@ const okFetch = (env) => (u) => {
     }
     const mf = JSON.parse(fs.readFileSync(__dirname + '/../manifest.json', 'utf8'));
     assert.ok(mf.content_scripts[0].css.includes('player.css'), 'manifest loads player.css');
-    assert.strictEqual(mf.version, '2.7.0');
+    assert.strictEqual(mf.version, '2.8.0');
     console.log('PASS 16 reskin is paint-only, no YouTube control hidden or removed');
   }
 
@@ -1052,5 +1052,51 @@ const okFetch = (env) => (u) => {
     console.log('PASS 37 glass off: layout stays, classic glass restored');
   }
 
-  console.log('ALL 37 TESTS PASS');
+  // 38. Tap-to-pause (v2.8): the whole gesture is swallowed for
+  // ANY non-interactive player target (touch layers included);
+  // the settings toggle restores stock tap-to-pause.
+  {
+    const video = makeVideo();
+    const env = makeEnv({ video, playerResponse: captionPR([ytTrack('en', '', 'English')]) });
+    env.sandbox.fetch = okFetch(env);
+    vm.runInContext(src, env.sandbox);
+    await flush();
+    const AUI = env.sandbox.window.__ytnfAUI;
+    const root = env.player.children.find((c) => c.id === 'ytnf-apple');
+    // A touch-feedback-style layer: inside the player, but NOT the
+    // video / container / bezel the v2.1 scope required.
+    const touchLayer = {
+      closest(sel) {
+        if (sel.includes('#ytnf-apple')) return null;
+        if (sel.includes('#movie_player')) return {};
+        return null;
+      },
+    };
+    const mkEv = (t) => ({
+      target: t, stopped: false,
+      stopPropagation() { this.stopped = true; },
+      preventDefault() {},
+      stopImmediatePropagation() { this.stopped = true; },
+    });
+    const pd = (env.listeners.pointerdown || []).slice(-1)[0];
+    const ck = (env.listeners.click || []).slice(-1)[0];
+    const evPd = mkEv(touchLayer); pd(evPd);
+    assert.strictEqual(evPd.stopped, true, 'pointerdown on the touch layer is swallowed');
+    const evCk = mkEv(touchLayer); ck(evCk);
+    assert.strictEqual(evCk.stopped, true, 'click on the touch layer is swallowed (no pause)');
+    assert.strictEqual(AUI.visible, true, 'the tap still toggles our UI');
+    // Toggle stock behaviour back on from the settings menu.
+    findAll(root, (c) => c.dataset && c.dataset.act === 'menu')[0].click();
+    findAll(root, (c) => c.dataset && c.dataset.pick === 'tap')[0].click();
+    const saved = env.storageSetCalls.map((c) => c.ytnf_prefs).filter(Boolean).pop();
+    assert.strictEqual(saved.tapToPause, true, 'tap-to-pause preference persisted');
+    const evPd2 = mkEv(touchLayer); pd(evPd2);
+    assert.strictEqual(evPd2.stopped, false, 'with the toggle on, pointerdown flows through');
+    const evCk2 = mkEv(touchLayer); ck(evCk2);
+    assert.strictEqual(evCk2.stopped, false, 'with the toggle on, the click reaches YouTube (stock pause)');
+    assert.strictEqual(evCk2.__ytnfTap, true, 'tap still marked so the UI toggles exactly once');
+    console.log('PASS 38 tap-to-pause: gesture swallowed by default, toggle restores stock');
+  }
+
+  console.log('ALL 38 TESTS PASS');
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });

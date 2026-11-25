@@ -84,7 +84,14 @@ Firefox Manifest V2 extension for Orion on iPhone/iPad.
    refraction is native-only); off = the classic frosted glass.
    The AirPlay button calls WebKit's playback-target picker
    where available.
-8. **Auto PiP on Scroll** (v2.4) — scrolling down to the comments
+8. **Tap Screen to Pause toggle** (v2.8) — a tap on the video
+   toggles only the overlay and never pauses (the whole gesture —
+   pointerdown, touchstart, click — is swallowed in the capture
+   phase for any non-interactive surface inside the player,
+   including the touch-feedback layer touch devices actually
+   tap). Settings → **Tap Screen to Pause** restores YouTube's
+   stock tap-to-pause.
+9. **Auto PiP on Scroll** (v2.4) — scrolling down to the comments
    pops the video into Picture in Picture once the player is
    halfway out of view (playing videos only, foreground only; a
    settings-menu toggle turns it off). This is separate from the
@@ -107,7 +114,7 @@ Notes / trade-offs:
 
 ## Install in Orion (iPhone / iPad)
 
-1. Download `yt-native-fullscreen-orion-2.7.0.zip` to your iPhone
+1. Download `yt-native-fullscreen-orion-2.8.0.zip` to your iPhone
    (Files → Downloads). **Don't unzip it.** The `.xpi` is the same
    package. If you installed v1.0/v1.1, remove that version first.
 2. Orion: **Settings → Extensions** → turn **Firefox extensions** on.
@@ -120,7 +127,7 @@ Notes / trade-offs:
    **Settings → Accessibility → Subtitles & Captioning →
    Closed Captions + SDH** is on.
 
-## On-device checks for v2.7.0
+## On-device checks for v2.8.0
 
 1. Open a video and tap it: the centre cluster appears (↺10,
    play/pause, 10↻) plus the glass bottom bar. Tap again to
@@ -162,7 +169,11 @@ Notes / trade-offs:
     video the centre pause button, ±10s skips and scrubber must
     all work immediately, the times must belong to the new video,
     and pausing must keep the UI up.
-11. **Layout + Liquid Glass (v2.7)**: check the arrangement —
+11. **Tap behaviour (v2.8)**: with the video playing, tap the
+    picture (not a button) — the controls should toggle and the
+    video must keep playing, every time. Then ⚙︎ → Tap Screen to
+    Pause on, and confirm taps pause again like stock YouTube.
+12. **Layout + Liquid Glass (v2.7)**: check the arrangement —
     Fullscreen/PiP/AirPlay upper left, volume upper right,
     Miniplayer/Settings lower right with clear space above the
     time bar. Drag the volume slider, tap the speaker (slash is

@@ -1,5 +1,5 @@
 'use strict';
-/* YT Native Fullscreen for Orion v2.7.0 (Firefox MV2)
+/* YT Native Fullscreen for Orion v2.8.0 (Firefox MV2)
  *
  * v1.0: fullscreen a YouTube video -> iOS native player, via
  *   video.webkitEnterFullscreen() called synchronously in the tap.
@@ -110,7 +110,8 @@
     queue: [], // our own queue: [{id, title}] — plays first at video end (Kurt's locked rule, Nov 5)
     autoplayNext: true, // gates Up Next only, never the queue
     autoPipScroll: true, // PiP when the player scrolls halfway out of view (Nov 14, separate from removed feature F)
-    liquidGlass: false, // v2.6: Apple-layout "true liquid glass" UI; off = the classic layout
+    liquidGlass: false, // v2.6: "true liquid glass" styling; the pill layout itself is permanent since v2.7
+    tapToPause: false, // v2.8: tapping the video pauses it (YouTube's stock behaviour). Off (default): a tap toggles ONLY our UI.
   };
   var prefsLoaded = false;
 
@@ -171,6 +172,7 @@
         if (typeof p.autoplayNext === 'boolean') PREFS.autoplayNext = p.autoplayNext;
         if (typeof p.autoPipScroll === 'boolean') PREFS.autoPipScroll = p.autoPipScroll;
         if (typeof p.liquidGlass === 'boolean') PREFS.liquidGlass = p.liquidGlass;
+        if (typeof p.tapToPause === 'boolean') PREFS.tapToPause = p.tapToPause;
       }
       prefsLoaded = true;
       log('prefs loaded:', JSON.stringify(PREFS));
@@ -1315,6 +1317,17 @@
           renderPanel('main');
         },
       }));
+      panel.appendChild(panelRow('Tap Screen to Pause', PREFS.tapToPause ? 'On' : 'Off', {
+        pick: 'tap', active: PREFS.tapToPause,
+        onPick: function () {
+          PREFS.tapToPause = !PREFS.tapToPause;
+          savePrefs();
+          showToast(PREFS.tapToPause
+            ? 'Tap screen to pause on — stock behaviour'
+            : 'Tap screen to pause off — taps toggle the controls only', 2200);
+          renderPanel('main');
+        },
+      }));
       panel.appendChild(panelRow('Auto PiP on Scroll', PREFS.autoPipScroll ? 'On' : 'Off', {
         pick: 'autopip', active: PREFS.autoPipScroll,
         onPick: function () {
@@ -2077,22 +2090,57 @@
 
   var scrubDocWired = false;
   var tapWired = false;
+  // Is this event a tap on the video surface (as opposed to a tap
+  // on something interactive inside the player)? v2.8 broadened
+  // the scope: the old check required the target to be the video,
+  // its container or the bezel, but on touch screens YouTube
+  // receives the tap on overlay layers above the video (the
+  // touch-feedback layer and friends), so taps slipped past the
+  // v2.1 rule and still paused. Now: anything inside the player
+  // that is not our overlay and not YouTube interactive chrome
+  // (buttons, links, menus, the control bars, cards, endscreen)
+  // counts as a video tap.
+  var YT_INTERACTIVE =
+    'a, button, input, textarea, select, [role="button"], ' +
+    '.ytp-chrome-bottom, .ytp-chrome-top, .ytp-popup, .ytp-panel, ' +
+    '.ytp-menuitem, .ytp-watermark, .ytp-pause-overlay, ' +
+    '.ytp-cards, .ytp-celebration, .ytp-endscreen-content, ' +
+    '.ytp-suggested-action, .iv-drawer, .ytp-info-panel';
+  function isVideoTapTarget(t) {
+    if (!t || typeof t.closest !== 'function') return false;
+    if (t.closest('#ytnf-apple')) return false; // our own UI handles itself
+    if (!t.closest('#movie_player, .html5-video-player')) return false;
+    if (t.closest(YT_INTERACTIVE)) return false;
+    return true;
+  }
   function wireTapToggle() {
     if (tapWired) return;
     tapWired = true;
+    // Swallow the whole gesture in the capture phase — pointerdown
+    // and touchstart as well as click — so no YouTube handler at
+    // any stage can turn the tap into a pause. (Settings toggle
+    // "Tap Screen to Pause" re-enables the stock behaviour.)
+    ['pointerdown', 'touchstart'].forEach(function (type) {
+      document.addEventListener(type, function (e) {
+        if (PREFS.tapToPause) return;
+        if (!AUI.root) return; // overlay not mounted: stock behaviour
+        if (isVideoTapTarget(e && e.target)) {
+          try { e.stopPropagation(); } catch (err) {}
+        }
+      }, true);
+    });
     document.addEventListener('click', function (e) {
       if (!AUI.root) return; // overlay not mounted: stock YouTube behaviour
-      var t = e && e.target;
-      if (!t || typeof t.closest !== 'function') return;
-      if (t.closest('#ytnf-apple')) return; // our own buttons handle themselves
-      if (!t.closest('#movie_player, .html5-video-player')) return;
-      if (!t.closest('video, .html5-video-container, .ytp-bezel')) return;
-      // A tap on the video itself: toggle ONLY the UI. Stopping the
-      // event here (capture phase, before YouTube's own handlers)
-      // is what prevents YouTube's click-to-pause from firing.
+      if (!isVideoTapTarget(e && e.target)) return;
+      // The tap toggles ONLY our UI. With tap-to-pause off (the
+      // default) the click is also stopped here, in the capture
+      // phase, before YouTube's own handlers can pause; with it
+      // on, the click flows through and YouTube pauses as stock.
       e.__ytnfTap = true;
-      try { e.stopPropagation(); } catch (err) {}
-      try { e.preventDefault(); } catch (err) {}
+      if (!PREFS.tapToPause) {
+        try { e.stopPropagation(); } catch (err) {}
+        try { e.preventDefault(); } catch (err) {}
+      }
       toggleUI();
     }, true);
   }

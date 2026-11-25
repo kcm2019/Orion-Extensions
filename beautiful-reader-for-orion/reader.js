@@ -193,6 +193,20 @@
     '.br-glow{position:absolute;left:-4px;right:-4px;top:-2px;bottom:8px;background-size:cover;background-position:center;filter:blur(26px) saturate(1.55);opacity:.5;z-index:0;border-radius:20px;pointer-events:none}',
     '.br-hero img{position:relative;z-index:1}',
     '.br-hero figcaption{position:relative;z-index:1}',
+    // Site-style leak shield (v1.21.1): the reader lives
+    // in the page's own document, so a site's bare
+    // element rules paint reader elements too — IB
+    // Times ships figure{background-color:#fff} and
+    // figcaption{background-color:#f5f5f5}, which sat
+    // invisibly under light reader themes but turned
+    // the caption strip white under a dark theme,
+    // washing out the theme-colored caption text
+    // (Kurt's screenshot, Nov 24 2026). The reader
+    // never wants a background on these three elements
+    // (its own cell/card backgrounds live on classes),
+    // so pin them transparent at ID specificity, with
+    // !important against sites that paint with it.
+    '#br-reader figure,#br-reader figcaption,#br-reader img{background:transparent!important}',
     '@media print{.br-glow{display:none!important}}',
     // Social embeds: a framed card with the platform's own embed inside.
     '.br-social{margin:26px 0;border:1px solid var(--br-faint);border-radius:16px;overflow:hidden}',

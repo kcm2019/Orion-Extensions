@@ -1,4 +1,37 @@
-# Beautiful Reader for Orion — v1.21.0
+# Beautiful Reader for Orion — v1.21.1
+
+## What's new in v1.21.1
+
+Site-style leak shield. Kurt's screenshot on IB
+Times: under a dark reader theme, the hero image's
+caption strip rendered as a white band with the
+caption text washed out on top of it. Root cause,
+verified in IB Times' own page CSS: the site ships
+bare element rules figure{background-color:#fff}
+and figcaption{background-color:#f5f5f5}. The
+reader lives in the page's document, so those
+rules painted the reader's figure and caption too
+— the reader set the caption's text color from its
+theme but never set a background, so the site's
+white won. Invisible under light reader themes;
+glaring under dark ones, which is why it only
+showed up sometimes (dark system + Follow System).
+
+Fix: the reader's figure, figcaption and img
+elements are pinned background:transparent at ID
+specificity with !important, so no site stylesheet
+can paint them. These are elements the reader
+never backgrounds itself (its card and table-cell
+backgrounds live on classes and are untouched).
+
+Verified against the real IB Times article (the
+caption in the screenshot is its body image) and
+with the site's exact rules in a fixture: figure,
+caption and image backgrounds now compute to
+transparent and the caption takes the theme color.
+New suite e2e-leakshield.js (7 checks); full
+battery 42 suites green.
+
 
 ## What's new in v1.21.0
 

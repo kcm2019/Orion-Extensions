@@ -19,8 +19,17 @@ function makeEl(tag) {
     children: [], style: {}, dataset: {}, attrs: {}, _ls: {}, _text: '', id: '',
     set textContent(v) { this._text = v; this.children = []; },
     get textContent() { return this._text; },
-    append(...xs) { this.children.push(...xs); },
-    appendChild(x) { this.children.push(x); return x; },
+    append(...xs) { xs.forEach((x) => this.appendChild(x)); },
+    appendChild(x) {
+      // Real DOM appendChild MOVES the node out of its old parent.
+      if (x && x._parent && x._parent.children) {
+        const i = x._parent.children.indexOf(x);
+        if (i >= 0) x._parent.children.splice(i, 1);
+      }
+      if (x) x._parent = this;
+      this.children.push(x);
+      return x;
+    },
     addEventListener(t, fn) { (this._ls[t] ||= []).push(fn); },
     removeEventListener() {},
     setAttribute(k, v) { this.attrs[k] = v; },
@@ -60,6 +69,10 @@ function makeVideo() {
     play() { this.paused = false; },
     pause() { this.paused = true; },
     disablePictureInPicture: true,
+    volume: 0.8,
+    muted: false,
+    pickerCalls: 0,
+    webkitShowPlaybackTargetPicker() { this.pickerCalls++; },
     webkitDisplayingFullscreen: false,
     webkitPresentationMode: 'inline',
     entered: 0,
@@ -580,7 +593,7 @@ const okFetch = (env) => (u) => {
     }
     const mf = JSON.parse(fs.readFileSync(__dirname + '/../manifest.json', 'utf8'));
     assert.ok(mf.content_scripts[0].css.includes('player.css'), 'manifest loads player.css');
-    assert.strictEqual(mf.version, '2.5.0');
+    assert.strictEqual(mf.version, '2.6.0');
     console.log('PASS 16 reskin is paint-only, no YouTube control hidden or removed');
   }
 
@@ -960,5 +973,77 @@ const okFetch = (env) => (u) => {
     console.log('PASS 34 UI builds before the player response catches up');
   }
 
-  console.log('ALL 34 TESTS PASS');
+  // 35. Liquid Glass toggle: controls move to the Apple layout
+  // (PiP + AirPlay top right, slim pill time bar, settings pill).
+  {
+    const video = makeVideo();
+    const env = makeEnv({ video, playerResponse: captionPR([ytTrack('en', '', 'English')]) });
+    env.sandbox.fetch = okFetch(env);
+    vm.runInContext(src, env.sandbox);
+    await flush();
+    const AUI = env.sandbox.window.__ytnfAUI;
+    const root = env.player.children.find((c) => c.id === 'ytnf-apple');
+    assert.strictEqual(AUI.mode, 'classic', 'classic layout by default');
+    assert.ok(findAll(AUI.bottom, (c) => c.dataset && c.dataset.act === 'menu')[0], 'gear starts in the bottom bar');
+    findAll(root, (c) => c.dataset && c.dataset.act === 'menu')[0].click();
+    findAll(root, (c) => c.dataset && c.dataset.pick === 'liquid')[0].click();
+    assert.strictEqual(AUI.mode, 'liquid', 'liquid mode on');
+    assert.ok(!findAll(AUI.bottom, (c) => c.dataset && c.dataset.act === 'menu')[0], 'gear left the bottom bar');
+    assert.ok(!findAll(AUI.bottom, (c) => c.dataset && c.dataset.act === 'pip')[0], 'PiP left the bottom bar');
+    assert.ok(findAll(AUI.topBar, (c) => c.dataset && c.dataset.act === 'pip')[0], 'PiP lives in the top bar');
+    assert.ok(findAll(AUI.topBar, (c) => c.dataset && c.dataset.act === 'airplay')[0], 'AirPlay lives in the top bar');
+    assert.ok(findAll(AUI.gearPill, (c) => c.dataset && c.dataset.act === 'menu')[0], 'settings sits in the pill above the time bar');
+    assert.strictEqual(AUI.topBar.style.display, 'flex', 'top bar shown in liquid mode');
+    assert.strictEqual(AUI.bottom.style.borderRadius, '999px', 'time bar is a slim pill');
+    const saved = env.storageSetCalls.map((c) => c.ytnf_prefs).filter(Boolean).pop();
+    assert.strictEqual(saved.liquidGlass, true, 'preference persisted');
+    console.log('PASS 35 liquid glass layout: controls re-homed Apple-style');
+  }
+
+  // 36. Volume pill + AirPlay button drive the live element.
+  {
+    const video = makeVideo();
+    const env = makeEnv({ video, playerResponse: captionPR([ytTrack('en', '', 'English')]) });
+    env.sandbox.fetch = okFetch(env);
+    vm.runInContext(src, env.sandbox);
+    await flush();
+    const AUI = env.sandbox.window.__ytnfAUI;
+    (video.listeners.volumechange || []).forEach((fn) => fn());
+    assert.strictEqual(AUI.volFill.style.width, '80%', 'volume fill mirrors the element');
+    AUI.volBtn.click();
+    assert.strictEqual(video.muted, true, 'speaker button mutes');
+    AUI.volBtn.click();
+    assert.strictEqual(video.muted, false, 'speaker button unmutes');
+    AUI.volTrack._ls.pointerdown[0]({ clientX: 100, preventDefault() {}, stopPropagation() {} });
+    assert.strictEqual(video.volume, 0.5, 'volume drag sets the element volume');
+    AUI.airplayBtn.click();
+    assert.strictEqual(video.pickerCalls, 1, 'AirPlay button opens the playback target picker');
+    console.log('PASS 36 volume pill + AirPlay drive the live element');
+  }
+
+  // 37. Toggling Liquid Glass off restores the classic layout.
+  {
+    const video = makeVideo();
+    const env = makeEnv({
+      video,
+      playerResponse: captionPR([ytTrack('en', '', 'English')]),
+      initialPrefs: { quality: 'auto', speed: 1, captionLang: null, liquidGlass: true },
+    });
+    env.sandbox.fetch = okFetch(env);
+    vm.runInContext(src, env.sandbox);
+    await flush();
+    const AUI = env.sandbox.window.__ytnfAUI;
+    const root = env.player.children.find((c) => c.id === 'ytnf-apple');
+    assert.strictEqual(AUI.mode, 'liquid', 'stored preference applies liquid at build');
+    findAll(root, (c) => c.dataset && c.dataset.act === 'menu')[0].click();
+    findAll(root, (c) => c.dataset && c.dataset.pick === 'liquid')[0].click();
+    assert.strictEqual(AUI.mode, 'classic', 'back to classic');
+    assert.ok(findAll(AUI.bottom, (c) => c.dataset && c.dataset.act === 'menu')[0], 'gear back in the bottom bar');
+    assert.ok(findAll(AUI.bottom, (c) => c.dataset && c.dataset.act === 'pip')[0], 'PiP back in the bottom bar');
+    assert.strictEqual(AUI.topBar.style.display, 'none', 'top bar hidden in classic');
+    assert.strictEqual(AUI.bottom.style.borderRadius, '18px', 'classic bar shape restored');
+    console.log('PASS 37 liquid glass off restores the classic layout');
+  }
+
+  console.log('ALL 37 TESTS PASS');
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });

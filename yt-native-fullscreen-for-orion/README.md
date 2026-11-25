@@ -70,7 +70,20 @@ Firefox Manifest V2 extension for Orion on iPhone/iPad.
    remaining time, scrubbing shows a time bubble with the target
    and delta while the bar follows your finger (seeks throttled,
    exact seek on release), and buttons get press feedback.
-7. **Auto PiP on Scroll** (v2.4) — scrolling down to the comments
+7. **Liquid Glass UI** (v2.6) — a settings-menu toggle switches
+   the overlay to Apple's player layout: PiP + AirPlay pill and a
+   volume pill (drag to set volume, tap the speaker to mute) in
+   the upper right, miniplayer + fullscreen top left, the
+   settings button in a pill floating above a slim pill-shaped
+   time bar that carries only the times and the scrubber. The
+   glass is backdrop-filter — the browser re-samples the live
+   content behind each element every frame, so the video shows
+   through in real time — with a lighter blur, a diagonal sheen
+   and a bright specular edge approximating Apple's Liquid
+   Glass (true edge refraction is native-only). The AirPlay
+   button calls WebKit's playback-target picker where available.
+   Toggle off restores the classic layout exactly.
+8. **Auto PiP on Scroll** (v2.4) — scrolling down to the comments
    pops the video into Picture in Picture once the player is
    halfway out of view (playing videos only, foreground only; a
    settings-menu toggle turns it off). This is separate from the
@@ -93,7 +106,7 @@ Notes / trade-offs:
 
 ## Install in Orion (iPhone / iPad)
 
-1. Download `yt-native-fullscreen-orion-2.5.0.zip` to your iPhone
+1. Download `yt-native-fullscreen-orion-2.6.0.zip` to your iPhone
    (Files → Downloads). **Don't unzip it.** The `.xpi` is the same
    package. If you installed v1.0/v1.1, remove that version first.
 2. Orion: **Settings → Extensions** → turn **Firefox extensions** on.
@@ -106,7 +119,7 @@ Notes / trade-offs:
    **Settings → Accessibility → Subtitles & Captioning →
    Closed Captions + SDH** is on.
 
-## On-device checks for v2.5.0
+## On-device checks for v2.6.0
 
 1. Open a video and tap it: the centre cluster appears (↺10,
    play/pause, 10↻) plus the glass bottom bar. Tap again to
@@ -148,6 +161,12 @@ Notes / trade-offs:
     video the centre pause button, ±10s skips and scrubber must
     all work immediately, the times must belong to the new video,
     and pausing must keep the UI up.
+11. **Liquid Glass**: open ⚙︎ → Liquid Glass UI on. The layout
+    should match the Apple reference: PiP + AirPlay and volume
+    top right, settings in a pill above a slim time bar, glass
+    showing the moving video through it. Drag the volume slider,
+    tap AirPlay (picker should open), then toggle it back off and
+    confirm the classic layout returns intact.
 
 ## Files
 

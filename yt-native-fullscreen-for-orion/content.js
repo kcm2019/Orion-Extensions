@@ -1,5 +1,5 @@
 'use strict';
-/* YT Native Fullscreen for Orion v2.5.0 (Firefox MV2)
+/* YT Native Fullscreen for Orion v2.6.0 (Firefox MV2)
  *
  * v1.0: fullscreen a YouTube video -> iOS native player, via
  *   video.webkitEnterFullscreen() called synchronously in the tap.
@@ -110,6 +110,7 @@
     queue: [], // our own queue: [{id, title}] — plays first at video end (Kurt's locked rule, Nov 5)
     autoplayNext: true, // gates Up Next only, never the queue
     autoPipScroll: true, // PiP when the player scrolls halfway out of view (Nov 14, separate from removed feature F)
+    liquidGlass: false, // v2.6: Apple-layout "true liquid glass" UI; off = the classic layout
   };
   var prefsLoaded = false;
 
@@ -169,6 +170,7 @@
         }
         if (typeof p.autoplayNext === 'boolean') PREFS.autoplayNext = p.autoplayNext;
         if (typeof p.autoPipScroll === 'boolean') PREFS.autoPipScroll = p.autoPipScroll;
+        if (typeof p.liquidGlass === 'boolean') PREFS.liquidGlass = p.liquidGlass;
       }
       prefsLoaded = true;
       log('prefs loaded:', JSON.stringify(PREFS));
@@ -766,7 +768,11 @@
     tElapsed: null, tRemain: null,
     visible: false, hideTimer: null, scrubbing: false, wasPlaying: false,
     page: 'main', player: null, panelOpen: false,
-    shownAt: 0, lastActivity: 0, compact: false,
+    shownAt: 0, lastActivity: 0, compact: false, mode: 'classic',
+    topBar: null, topPillL: null, topPillR: null, volPill: null,
+    volTrack: null, volFill: null, volKnob: null, volBtn: null,
+    airplayBtn: null, gearPill: null, scrubTrack: null, scrubBubble: null,
+    volScrubbing: false,
   };
 
   var MIN_VISIBLE_MS = 5000; // Kurt's rule: once up, the UI stays up at least 5s
@@ -1016,13 +1022,20 @@
     if (AUI.tRemain) AUI.tRemain.textContent = isFinite(dur) ? '-' + fmtTime(dur - ct) : 'LIVE';
   }
 
+  function setChrome(vis) {
+    [AUI.center, AUI.bottom, AUI.topBar, AUI.gearPill].forEach(function (el) {
+      if (el) {
+        el.style.opacity = vis ? '1' : '0';
+        el.style.visibility = vis ? 'visible' : 'hidden';
+      }
+    });
+  }
   function showUI() {
     if (!AUI.root) return;
     if (!AUI.visible) AUI.shownAt = Date.now();
     AUI.visible = true;
     AUI.lastActivity = Date.now();
-    if (AUI.center) { AUI.center.style.opacity = '1'; AUI.center.style.visibility = 'visible'; }
-    if (AUI.bottom) { AUI.bottom.style.opacity = '1'; AUI.bottom.style.visibility = 'visible'; }
+    setChrome(true);
     updateTransport();
     scheduleHide();
   }
@@ -1040,8 +1053,7 @@
     if (AUI.scrubbing) return;
     AUI.visible = false;
     closePanel();
-    if (AUI.center) { AUI.center.style.opacity = '0'; AUI.center.style.visibility = 'hidden'; }
-    if (AUI.bottom) { AUI.bottom.style.opacity = '0'; AUI.bottom.style.visibility = 'hidden'; }
+    setChrome(false);
   }
   function scheduleHide() {
     if (AUI.hideTimer) { clearTimeout(AUI.hideTimer); AUI.hideTimer = null; }
@@ -1090,6 +1102,7 @@
     v.addEventListener('pause', function () { updateTransport(); showUI(); });
     v.addEventListener('loadedmetadata', updateTransport);
     v.addEventListener('seeking', updateTransport);
+    v.addEventListener('volumechange', function () { updateVolumeUI(); });
     v.addEventListener('ended', function () { updateTransport(); showUI(); });
   }
 
@@ -1290,6 +1303,18 @@
         PREFS.queue.length ? PREFS.queue.length + ' queued' : 'Empty', {
           page: 'queue', onPick: function () { renderPanel('queue'); },
         }));
+      panel.appendChild(panelRow('Liquid Glass UI', PREFS.liquidGlass ? 'On' : 'Off', {
+        pick: 'liquid', active: PREFS.liquidGlass,
+        onPick: function () {
+          PREFS.liquidGlass = !PREFS.liquidGlass;
+          savePrefs();
+          applyLayoutMode();
+          showToast(PREFS.liquidGlass
+            ? 'Liquid Glass UI on — Apple-style layout'
+            : 'Liquid Glass UI off — classic layout', 2200);
+          renderPanel('main');
+        },
+      }));
       panel.appendChild(panelRow('Auto PiP on Scroll', PREFS.autoPipScroll ? 'On' : 'Off', {
         pick: 'autopip', active: PREFS.autoPipScroll,
         onPick: function () {
@@ -1545,8 +1570,9 @@
       w = r ? r.width : (AUI.player.offsetWidth || 0);
     } catch (e) {}
     var compact = w > 0 && w <= 480;
-    if (compact === AUI.compact) return;
+    if (compact === AUI.compact) { syncTopChrome(); return; }
     AUI.compact = compact;
+    syncTopChrome();
     if (!AUI.center || !AUI.bottom) return;
     if (compact) {
       AUI.center.style.gap = '18px';
@@ -1567,6 +1593,124 @@
       if (AUI.tRemain) AUI.tRemain.style.display = '';
     }
     log('layout:', compact ? 'compact (miniplayer)' : 'full', w + 'px');
+  }
+
+  /* ---------------- Liquid Glass mode (v2.6, Kurt's ask) ----------------
+   * A settings toggle switches the overlay to an Apple-player
+   * layout: PiP + AirPlay pill and a volume pill in the upper
+   * right, miniplayer + fullscreen top left, the settings button
+   * in a pill floating above a slim pill-shaped time bar that
+   * carries nothing but the times and the scrubber.
+   * The "glass" is backdrop-filter: the browser re-samples the
+   * live content behind each element every frame, so the video
+   * genuinely shows through, moving, in real time — lighter blur
+   * + a bright specular top edge + a diagonal sheen gets as close
+   * to Apple's Liquid Glass as web tech allows (true optical
+   * refraction at the edges is native-only). Toggle off restores
+   * the classic layout exactly. */
+  function applyGlass(el, liquid, dark) {
+    if (!el) return;
+    if (liquid) {
+      el.style.background = dark
+        ? 'linear-gradient(135deg,rgba(24,24,28,.52),rgba(24,24,28,.34) 55%,rgba(24,24,28,.26))'
+        : 'linear-gradient(135deg,rgba(255,255,255,.26),rgba(255,255,255,.11) 45%,rgba(255,255,255,.05))';
+      el.style.backdropFilter = 'blur(16px) saturate(180%) brightness(1.14)';
+      el.style.webkitBackdropFilter = 'blur(16px) saturate(180%) brightness(1.14)';
+      el.style.border = '1px solid rgba(255,255,255,.38)';
+      el.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,.5),inset 0 -10px 18px rgba(255,255,255,.07),0 10px 32px rgba(0,0,0,.30)';
+    } else {
+      el.style.background = 'rgba(28,28,30,.28)';
+      el.style.backdropFilter = 'blur(26px) saturate(200%)';
+      el.style.webkitBackdropFilter = 'blur(26px) saturate(200%)';
+      el.style.border = '1px solid rgba(255,255,255,.24)';
+      el.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,.28),0 8px 28px rgba(0,0,0,.32)';
+    }
+  }
+
+  function speakerSVG(level) {
+    var waves = '';
+    if (level > 0) {
+      waves = '<path d="M15.5 9.8a3.2 3.2 0 0 1 0 4.4"/>';
+      if (level >= 0.5) waves += '<path d="M18.2 7.2a7 7 0 0 1 0 9.6"/>';
+    }
+    var slash = level <= 0 ? '<path d="M4.5 4.5l15 15" stroke="#ff6961"/>' : '';
+    return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" ' +
+      'stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      '<path d="M4 9.5v5h3.5L12 18.6V5.4L7.5 9.5H4z" fill="#fff" stroke="none"/>' +
+      waves + slash + '</svg>';
+  }
+
+  function updateVolumeUI() {
+    if (!AUI.volFill) return;
+    var v = CAP.video;
+    var vol = 0, muted = true;
+    if (v) {
+      vol = typeof v.volume === 'number' ? v.volume : 0;
+      muted = !!v.muted || vol <= 0;
+    }
+    var pct = muted ? 0 : Math.round(vol * 100);
+    AUI.volFill.style.width = pct + '%';
+    if (AUI.volKnob) AUI.volKnob.style.left = pct + '%';
+    if (AUI.volBtn) AUI.volBtn.innerHTML = speakerSVG(muted ? 0 : vol);
+  }
+
+  function setVolumeFromX(clientX) {
+    var v = syncVideo();
+    if (!v || !AUI.volTrack) return;
+    var rect = null;
+    try { rect = AUI.volTrack.getBoundingClientRect(); } catch (e) {}
+    if (!rect || !rect.width) return;
+    var frac = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    try {
+      v.volume = frac;
+      if (frac > 0 && v.muted) v.muted = false;
+    } catch (e) {}
+    updateVolumeUI();
+  }
+
+  function syncTopChrome() {
+    var show = AUI.mode === 'liquid' && !AUI.compact;
+    if (AUI.topBar) AUI.topBar.style.display = show ? 'flex' : 'none';
+    if (AUI.gearPill) AUI.gearPill.style.display = show ? 'flex' : 'none';
+  }
+
+  function applyLayoutMode() {
+    var liquid = !!PREFS.liquidGlass;
+    AUI.mode = liquid ? 'liquid' : 'classic';
+    if (!AUI.root || !AUI.bottom) return;
+    var b = AUI.bottom;
+    if (liquid) {
+      if (AUI.topPillL) { AUI.topPillL.appendChild(AUI.miniBtn); AUI.topPillL.appendChild(AUI.fsBtn); }
+      if (AUI.topPillR) { AUI.topPillR.appendChild(AUI.pipBtn); AUI.topPillR.appendChild(AUI.airplayBtn); }
+      if (AUI.gearPill) AUI.gearPill.appendChild(AUI.gearBtn);
+      b.style.borderRadius = '999px';
+      b.style.padding = '6px 16px';
+      b.style.left = '10px'; b.style.right = '10px'; b.style.bottom = '10px';
+      b.style.gap = '10px';
+      if (AUI.scrubTrack) AUI.scrubTrack.style.height = '3.5px';
+      if (AUI.scrubKnob) { AUI.scrubKnob.style.width = '12px'; AUI.scrubKnob.style.height = '12px'; }
+      if (AUI.tElapsed) AUI.tElapsed.style.fontSize = '12.5px';
+      if (AUI.tRemain) AUI.tRemain.style.fontSize = '12.5px';
+    } else {
+      b.appendChild(AUI.gearBtn); b.appendChild(AUI.miniBtn);
+      b.appendChild(AUI.pipBtn); b.appendChild(AUI.fsBtn);
+      b.style.borderRadius = '18px';
+      b.style.padding = '8px 12px';
+      b.style.left = '12px'; b.style.right = '12px'; b.style.bottom = '12px';
+      b.style.gap = '12px';
+      if (AUI.scrubTrack) AUI.scrubTrack.style.height = '5px';
+      if (AUI.scrubKnob) { AUI.scrubKnob.style.width = '15px'; AUI.scrubKnob.style.height = '15px'; }
+      if (AUI.tElapsed) AUI.tElapsed.style.fontSize = '13px';
+      if (AUI.tRemain) AUI.tRemain.style.fontSize = '13px';
+    }
+    [AUI.bottom, AUI.panel, AUI.topPillL, AUI.topPillR, AUI.volPill, AUI.gearPill,
+     AUI.gearBtn, AUI.miniBtn, AUI.pipBtn, AUI.fsBtn, AUI.airplayBtn, AUI.volBtn,
+    ].forEach(function (el) { applyGlass(el, liquid, false); });
+    [AUI.playBtn, AUI.backBtn, AUI.fwdBtn].forEach(function (el) { applyGlass(el, liquid, true); });
+    syncTopChrome();
+    setChrome(AUI.visible);
+    updateVolumeUI();
+    log('layout mode:', AUI.mode);
   }
 
   /* ---------------- build ---------------- */
@@ -1731,6 +1875,88 @@
       hair.appendChild(hairFill);
       root.appendChild(hair);
 
+      /* ---- Liquid-mode chrome (built always, shown only in liquid
+         mode; the buttons are the SAME elements reparented by
+         applyLayoutMode, so their handlers never change) ---- */
+      function pillEl(extra) {
+        var p = document.createElement('div');
+        p.style.cssText = GLASS + FONT +
+          'display:flex;align-items:center;gap:2px;padding:4px;border-radius:999px;pointer-events:auto;' +
+          (extra || '');
+        return p;
+      }
+      var airplayBtn = circleBtn(44, 0, '');
+      airplayBtn.innerHTML =
+        '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" ' +
+        'stroke-width="1.8" aria-hidden="true">' +
+        '<rect x="3" y="4.5" width="18" height="12" rx="2.5"/>' +
+        '<path d="M8 20.6 12 15.8l4 4.8z" fill="#fff" stroke="none"/></svg>';
+      airplayBtn.dataset.act = 'airplay';
+      airplayBtn.title = 'AirPlay';
+      airplayBtn.addEventListener('click', function (e) {
+        try { e.stopPropagation(); } catch (err) {}
+        var v = syncVideo(); if (!v) return;
+        if (typeof v.webkitShowPlaybackTargetPicker === 'function') {
+          try { v.webkitShowPlaybackTargetPicker(); }
+          catch (err) { showToast('AirPlay picker failed'); }
+        } else {
+          showToast('AirPlay is not available for this video in the browser');
+        }
+        showUI();
+      });
+      var volBtn = circleBtn(34, 0, '');
+      volBtn.innerHTML = speakerSVG(0.8);
+      volBtn.dataset.act = 'volbtn';
+      volBtn.title = 'Mute / unmute';
+      volBtn.addEventListener('click', function (e) {
+        try { e.stopPropagation(); } catch (err) {}
+        var v = syncVideo(); if (!v) return;
+        try {
+          v.muted = !v.muted;
+          if (!v.muted && (v.volume || 0) <= 0) v.volume = 0.5;
+        } catch (err) {}
+        updateVolumeUI();
+        showUI();
+      });
+      var volTrack = document.createElement('div');
+      volTrack.dataset.act = 'vol';
+      volTrack.style.cssText = 'position:relative;width:92px;height:36px;flex:none;' +
+        'pointer-events:auto;touch-action:none;cursor:pointer;';
+      var volRail = document.createElement('div');
+      volRail.style.cssText = 'position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);' +
+        'height:4px;border-radius:999px;background:rgba(255,255,255,.32);';
+      var volFill = document.createElement('div');
+      volFill.style.cssText = 'position:absolute;left:0;top:0;height:100%;width:80%;' +
+        'border-radius:999px;background:#fff;';
+      volRail.appendChild(volFill);
+      var volKnob = document.createElement('div');
+      volKnob.style.cssText = 'position:absolute;top:50%;left:80%;width:12px;height:12px;' +
+        'border-radius:50%;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.5);transform:translate(-50%,-50%);';
+      volTrack.appendChild(volRail); volTrack.appendChild(volKnob);
+      volTrack.addEventListener('pointerdown', function (e) {
+        try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
+        try { if (e.pointerId != null && volTrack.setPointerCapture) volTrack.setPointerCapture(e.pointerId); } catch (err) {}
+        AUI.volScrubbing = true;
+        setVolumeFromX(e.clientX);
+        showUI();
+      });
+      var topPillL = pillEl('');
+      var topPillR = pillEl('');
+      var volPill = pillEl('gap:8px;padding:4px 12px 4px 5px;');
+      volPill.appendChild(volBtn); volPill.appendChild(volTrack);
+      var rightGroup = document.createElement('div');
+      rightGroup.style.cssText = 'display:flex;align-items:center;gap:10px;pointer-events:none;';
+      rightGroup.appendChild(topPillR); rightGroup.appendChild(volPill);
+      var topBar = document.createElement('div');
+      topBar.style.cssText = 'position:absolute;left:12px;right:12px;top:10px;display:none;' +
+        'justify-content:space-between;align-items:flex-start;pointer-events:none;' +
+        'opacity:0;visibility:hidden;transition:opacity .25s ease;' + FONT;
+      topBar.appendChild(topPillL); topBar.appendChild(rightGroup);
+      root.appendChild(topBar);
+      var gearPill = pillEl('position:absolute;right:12px;bottom:68px;display:none;' +
+        'opacity:0;visibility:hidden;transition:opacity .25s ease;');
+      root.appendChild(gearPill);
+
       root.addEventListener('click', function (e) { try { e.stopPropagation(); } catch (err) {} });
 
       /* scrub wiring: pointerdown on the track, move/up on document.
@@ -1753,8 +1979,10 @@
         scrubDocWired = true;
         document.addEventListener('pointermove', function (e) {
           if (AUI.scrubbing) scrubTo(e.clientX);
+          if (AUI.volScrubbing) setVolumeFromX(e.clientX);
         });
         document.addEventListener('pointerup', function () {
+          if (AUI.volScrubbing) AUI.volScrubbing = false;
           if (!AUI.scrubbing) return;
           AUI.scrubbing = false;
           if (AUI.scrubKnob) AUI.scrubKnob.style.transform = 'translate(-50%,-50%)';
@@ -1799,7 +2027,11 @@
       AUI.playBtn = playBtn; AUI.backBtn = backBtn; AUI.fwdBtn = fwdBtn;
       AUI.gearBtn = gearBtn; AUI.fsBtn = fsBtn; AUI.miniBtn = miniBtn; AUI.pipBtn = pipBtn;
       AUI.scrub = scrub; AUI.scrubFill = fill; AUI.scrubKnob = knob; AUI.hairFill = hairFill;
-      AUI.scrubBubble = bubble;
+      AUI.scrubBubble = bubble; AUI.scrubTrack = track;
+      AUI.topBar = topBar; AUI.topPillL = topPillL; AUI.topPillR = topPillR;
+      AUI.volPill = volPill; AUI.volTrack = volTrack; AUI.volFill = volFill;
+      AUI.volKnob = volKnob; AUI.volBtn = volBtn; AUI.airplayBtn = airplayBtn;
+      AUI.gearPill = gearPill;
       AUI.tElapsed = tElapsed; AUI.tRemain = tRemain;
       AUI.visible = false;
       AUI.shownAt = 0; AUI.lastActivity = 0;
@@ -1812,6 +2044,7 @@
         setInterval(function () { refreshLayout(); syncVideo(); }, 1000);
       }
       refreshLayout();
+      applyLayoutMode();
 
       player.appendChild(root);
       wireTapToggle();

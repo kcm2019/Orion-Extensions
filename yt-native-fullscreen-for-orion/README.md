@@ -84,7 +84,20 @@ Firefox Manifest V2 extension for Orion on iPhone/iPad.
    refraction is native-only); off = the classic frosted glass.
    The AirPlay button calls WebKit's playback-target picker
    where available.
-8. **AirPlay active glow** (v2.13) — while playback is
+8. **The big round** (v2.14) — the below-player UI was
+   rebuilt (the v2.12 glass fought the components: blur over a
+   scrolling list, internals forced transparent; it is now a
+   near-solid iOS grouped card — one hairline, 12px radius,
+   internals untouched, blue-tinted current queue row), plus:
+   a sleep timer (durations or end-of-video), built-in
+   SponsorBlock skipping (hash-prefix API lookup, per-category
+   toggles), ad handling (the overlay steps aside during ads
+   so YouTube's own Skip button is reachable, and auto-skips
+   when allowed), hold-to-2x on the video, chapters with scrub
+   markers and storyboard thumbnails in the scrub bubble, an
+   update checker fed from the Orion-Extensions repo, and a
+   Copy Debug Log row in Settings.
+9. **AirPlay active glow** (v2.13) — while playback is
    wireless, the AirPlay glyph turns system blue (#0A84FF)
    with a soft halo, matching the native iOS player; it
    returns to white when AirPlay disconnects. Driven by
@@ -171,7 +184,7 @@ Notes / trade-offs:
 
 ## Install in Orion (iPhone / iPad)
 
-1. Download `yt-native-fullscreen-orion-2.13.0.zip` to your iPhone
+1. Download `yt-native-fullscreen-orion-2.14.0.zip` to your iPhone
    (Files → Downloads). **Don't unzip it.** The `.xpi` is the same
    package. If you installed v1.0/v1.1, remove that version first.
 2. Orion: **Settings → Extensions** → turn **Firefox extensions** on.
@@ -184,7 +197,7 @@ Notes / trade-offs:
    **Settings → Accessibility → Subtitles & Captioning →
    Closed Captions + SDH** is on.
 
-## On-device checks for v2.13.0
+## On-device checks for v2.14.0
 
 1. Open a video and tap it: the centre cluster appears (↺10,
    play/pause, 10↻) plus the glass bottom bar. Tap again to
@@ -226,7 +239,15 @@ Notes / trade-offs:
     video the centre pause button, ±10s skips and scrubber must
     all work immediately, the times must belong to the new video,
     and pausing must keep the UI up.
-11. **AirPlay glow (v2.13)**: start AirPlay from our button,
+11. **v2.14 round**: description + Queue box should read as
+    clean dark cards (no blur, no bleed-through); set a 5-min
+    sleep timer and confirm playback pauses; on a video with a
+    sponsor segment, confirm it skips with a toast; hold your
+    finger on the video for 2x, release to return to normal;
+    scrub a chaptered video and check the bubble shows the
+    chapter name + a thumbnail; during an ad, confirm our UI
+    disappears and YouTube's Skip works (and auto-skips).
+12. **AirPlay glow (v2.13)**: start AirPlay from our button,
     then reopen the controls — the AirPlay glyph should be
     blue and glowing while you're connected, and white again
     after you disconnect.

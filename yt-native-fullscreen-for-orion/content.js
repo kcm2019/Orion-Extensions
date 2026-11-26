@@ -1,5 +1,5 @@
 'use strict';
-/* YT Native Fullscreen for Orion v2.13.0 (Firefox MV2)
+/* YT Native Fullscreen for Orion v2.14.0 (Firefox MV2)
  *
  * v1.0: fullscreen a YouTube video -> iOS native player, via
  *   video.webkitEnterFullscreen() called synchronously in the tap.
@@ -54,7 +54,15 @@
     large: '480p', medium: '360p', small: '240p', tiny: '144p',
   };
 
+  var VERSION = '2.14.0';
+  var LOGBUF = [];
   function log() {
+    var msg = '';
+    try { msg = [].slice.call(arguments).join(' '); } catch (e) {}
+    try {
+      LOGBUF.push(new Date().toISOString().substr(11, 8) + ' ' + msg);
+      if (LOGBUF.length > 120) LOGBUF.splice(0, LOGBUF.length - 120);
+    } catch (e) {}
     try { console.log.apply(console, [TAG].concat([].slice.call(arguments))); } catch (e) {}
   }
 
@@ -113,7 +121,22 @@
     liquidGlass: false, // v2.6: "true liquid glass" styling; the pill layout itself is permanent since v2.7
     tapToPause: false, // v2.8: tapping the video pauses it (YouTube's stock behaviour). Off (default): a tap toggles ONLY our UI.
     resumeOnExit: true, // v2.9: keep playing when PiP closes or native fullscreen exits (both pause the video by default). Toggle disables it.
+    sleepMinutes: 0, // v2.14 (A): 0 = off, >0 = minutes, -1 = pause at end of video
+    sleepDeadline: 0, // v2.14 (A): epoch ms when the sleep timer fires (persisted so it survives navigation)
+    sponsorBlock: true, // v2.14 (B): built-in SponsorBlock segment skipping
+    sbCats: null, // v2.14 (B): per-category switches; null = defaults (all true)
+    autoSkipAds: true, // v2.14 (C): click YouTube's Skip button the moment it appears
   };
+  var SB_CAT_LABELS = {
+    sponsor: 'Sponsor', selfpromo: 'Self-promotion', interaction: 'Interaction reminder',
+    intro: 'Intro', outro: 'Outro', music_offtopic: 'Non-music section',
+  };
+  var SB_CATS = Object.keys(SB_CAT_LABELS);
+  function sbCatOn(cat) {
+    if (!PREFS.sponsorBlock) return false;
+    if (!PREFS.sbCats) return true;
+    return PREFS.sbCats[cat] !== false;
+  }
   var prefsLoaded = false;
 
   function storageGet() {
@@ -175,8 +198,14 @@
         if (typeof p.liquidGlass === 'boolean') PREFS.liquidGlass = p.liquidGlass;
         if (typeof p.tapToPause === 'boolean') PREFS.tapToPause = p.tapToPause;
         if (typeof p.resumeOnExit === 'boolean') PREFS.resumeOnExit = p.resumeOnExit;
+        if (typeof p.sleepMinutes === 'number') PREFS.sleepMinutes = p.sleepMinutes;
+        if (typeof p.sleepDeadline === 'number') PREFS.sleepDeadline = p.sleepDeadline;
+        if (typeof p.sponsorBlock === 'boolean') PREFS.sponsorBlock = p.sponsorBlock;
+        if (p.sbCats && typeof p.sbCats === 'object') PREFS.sbCats = p.sbCats;
+        if (typeof p.autoSkipAds === 'boolean') PREFS.autoSkipAds = p.autoSkipAds;
       }
       prefsLoaded = true;
+      armSleepTimer();
       log('prefs loaded:', JSON.stringify(PREFS));
     });
   }
@@ -767,6 +796,8 @@
    * ================================================================ */
   var AUI = {
     root: null, center: null, bottom: null, panel: null,
+    holdChip: null, holdSpeed: false, swallowNextClick: false,
+    updateAvail: null, scrubThumb: null, scrubBubbleText: null,
     playBtn: null, backBtn: null, fwdBtn: null, gearBtn: null, fsBtn: null,
     scrub: null, scrubFill: null, scrubKnob: null, hairFill: null,
     tElapsed: null, tRemain: null,
@@ -1170,6 +1201,8 @@
     });
     v.addEventListener('pause', function () { updateTransport(); showUI(); });
     v.addEventListener('loadedmetadata', updateTransport);
+    v.addEventListener('loadedmetadata', function () { renderChapterTicks(); });
+    v.addEventListener('timeupdate', function () { checkSponsorBlock(v); });
     v.addEventListener('seeking', updateTransport);
     v.addEventListener('volumechange', function () { updateVolumeUI(); });
     // Resume-after-exit (v2.9): track "was playing" continuously,
@@ -1352,6 +1385,14 @@
   }
 
   function onVideoEnded() {
+    if (PREFS.sleepMinutes === -1) {
+      PREFS.sleepMinutes = 0;
+      savePrefs();
+      try { if (CAP.video) CAP.video.pause(); } catch (e) {}
+      showToast('Sleep timer — stopped at the end of video', 2600);
+      log('sleep timer: stopped at end of video');
+      return;
+    }
     if (PREFS.queue.length) {
       var next = PREFS.queue.shift();
       savePrefs();
@@ -1375,6 +1416,385 @@
       v.addEventListener('ended', onVideoEnded);
     } catch (e) {}
   }
+
+  /* ================================================================
+   * v2.14 feature engines
+   * ================================================================ */
+
+  /* ---- A: sleep timer ---- */
+  var sleepInt = null;
+  function sleepRemainingMs() {
+    return PREFS.sleepDeadline ? Math.max(0, PREFS.sleepDeadline - Date.now()) : 0;
+  }
+  function sleepLabel() {
+    if (PREFS.sleepMinutes === -1) return 'End of video';
+    if (!PREFS.sleepMinutes) return 'Off';
+    var ms = sleepRemainingMs();
+    if (ms > 0) return Math.ceil(ms / 60000) + ' min left';
+    return PREFS.sleepMinutes + ' min';
+  }
+  function armSleepTimer() {
+    if (sleepInt || !PREFS.sleepDeadline) return;
+    if (PREFS.sleepDeadline <= Date.now()) {
+      // Expired while the page was away: clear it quietly rather
+      // than pausing a video the user has only just opened.
+      PREFS.sleepDeadline = 0;
+      PREFS.sleepMinutes = 0;
+      savePrefs();
+      return;
+    }
+    sleepInt = setInterval(sleepTick, 1000);
+  }
+  function sleepTick() {
+    if (!PREFS.sleepDeadline) {
+      if (sleepInt) { clearInterval(sleepInt); sleepInt = null; }
+      return;
+    }
+    if (Date.now() < PREFS.sleepDeadline) return;
+    PREFS.sleepDeadline = 0;
+    PREFS.sleepMinutes = 0;
+    savePrefs();
+    if (sleepInt) { clearInterval(sleepInt); sleepInt = null; }
+    var v = syncVideo();
+    if (v) { try { v.pause(); } catch (e) {} }
+    showToast('Sleep timer — playback paused', 2600);
+    log('sleep timer fired');
+  }
+  function setSleep(minutes) {
+    PREFS.sleepMinutes = minutes;
+    PREFS.sleepDeadline = minutes > 0 ? Date.now() + minutes * 60000 : 0;
+    savePrefs();
+    if (sleepInt) { clearInterval(sleepInt); sleepInt = null; }
+    armSleepTimer();
+  }
+  try { window.__ytnfSleepTick = sleepTick; } catch (e) {}
+
+  /* ---- B: SponsorBlock (built in) ---- */
+  var SB = { videoId: null, segments: [], skipped: {} };
+  function sbFetchFor(pr) {
+    if (!PREFS.sponsorBlock) return;
+    var id = null;
+    try { id = pr && pr.videoDetails && pr.videoDetails.videoId; } catch (e) {}
+    if (!id || id === SB.videoId) return;
+    SB.videoId = id; SB.segments = []; SB.skipped = {};
+    var cats = SB_CATS.filter(sbCatOn);
+    if (!cats.length) return;
+    var apply = function (list) {
+      if (SB.videoId !== id || !Array.isArray(list)) return;
+      SB.segments = list.filter(function (sg) {
+        return sg && Array.isArray(sg.segment) && sg.segment.length === 2;
+      }).map(function (sg) {
+        return { start: +sg.segment[0], end: +sg.segment[1], category: sg.category || 'sponsor', uuid: sg.UUID || '' };
+      }).filter(function (sg) { return isFinite(sg.start) && isFinite(sg.end) && sg.end > sg.start; });
+      log('sponsorblock:', SB.segments.length, 'segments for', id);
+    };
+    var plain = function () {
+      try {
+        fetch('https://sponsor.ajay.app/api/skipSegments?videoID=' + encodeURIComponent(id) +
+          '&categories=' + encodeURIComponent(JSON.stringify(cats)))
+          .then(function (r) { return r && r.ok ? r.json() : []; })
+          .then(apply, function () {});
+      } catch (e) {}
+    };
+    try {
+      if (window.crypto && crypto.subtle && crypto.subtle.digest && typeof TextEncoder === 'function') {
+        crypto.subtle.digest('SHA-256', new TextEncoder().encode(id)).then(function (buf) {
+          var hex = Array.prototype.map.call(new Uint8Array(buf), function (b) {
+            return ('0' + b.toString(16)).slice(-2);
+          }).join('');
+          return fetch('https://sponsor.ajay.app/api/skipSegments/' + hex.slice(0, 4));
+        }).then(function (r) { return r && r.ok ? r.json() : []; }).then(function (arr) {
+          if (!Array.isArray(arr)) { plain(); return; }
+          var hit = null;
+          arr.forEach(function (e2) { if (e2 && e2.videoID === id) hit = e2; });
+          if (hit) apply(hit.segments || []); else plain();
+        }, plain);
+      } else plain();
+    } catch (e) { plain(); }
+  }
+  function checkSponsorBlock(v) {
+    if (!PREFS.sponsorBlock || !SB.segments.length || !v) return;
+    if (AUI.scrubbing || v.seeking || v.paused) return;
+    var t = v.currentTime || 0;
+    for (var i = 0; i < SB.segments.length; i++) {
+      var sg = SB.segments[i];
+      if (!sbCatOn(sg.category)) continue;
+      var key = sg.uuid || (sg.start + '-' + sg.end);
+      if (t < sg.start - 1 && SB.skipped[key]) { delete SB.skipped[key]; continue; }
+      if (SB.skipped[key]) continue;
+      if (t >= sg.start && t < sg.end - 0.05) {
+        SB.skipped[key] = true;
+        try { v.currentTime = sg.end; } catch (e) {}
+        showToast('Skipped ' + (SB_CAT_LABELS[sg.category] || 'segment'), 1800);
+        log('sponsorblock: skipped', sg.category, sg.start, '->', sg.end);
+      }
+    }
+  }
+  try { window.__ytnfSB = function () { return SB; }; } catch (e) {}
+
+  /* ---- C: ads — step aside so YouTube's own ad UI (incl. the
+   * Skip button our bar used to cover) is fully reachable, and
+   * auto-click Skip the moment it appears (toggleable). ---- */
+  var adState = { showing: false, skipTriedAt: 0 };
+  function attemptAdSkip(player) {
+    var now = Date.now();
+    if (adState.skipTriedAt && now - adState.skipTriedAt < 4000) return;
+    var btn = null;
+    try {
+      btn = player.querySelector('.ytp-skip-ad-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button-modern');
+    } catch (e) {}
+    if (!btn) return;
+    adState.skipTriedAt = now;
+    fireRealClick(btn);
+    log('ad: auto-skip clicked');
+  }
+  function refreshAdState() {
+    var player = findPlayer();
+    if (!player || !player.classList) return;
+    var showing = false;
+    try { showing = !!player.classList.contains('ad-showing'); } catch (e) {}
+    if (showing && PREFS.autoSkipAds) attemptAdSkip(player);
+    if (showing === adState.showing) return;
+    adState.showing = showing;
+    if (!AUI.root) return;
+    if (showing) {
+      adState.skipTriedAt = 0;
+      AUI.root.style.display = 'none';
+      try { player.classList.remove('ytnf-on'); } catch (e) {}
+      log('ad showing — overlay stepped aside');
+    } else {
+      AUI.root.style.display = '';
+      try { player.classList.add('ytnf-on'); } catch (e) {}
+      log('ad ended — overlay restored');
+    }
+  }
+  try { window.__ytnfAdRefresh = refreshAdState; } catch (e) {}
+
+  /* ---- D: hold-to-2x ---- */
+  var holdState = null;
+  function wireHoldSpeed() {
+    document.addEventListener('pointerdown', function (e) {
+      if (AUI.panelOpen || holdState) return;
+      if (!isVideoTapTarget(e && e.target)) return;
+      var v = syncVideo();
+      if (!v || v.paused || v.ended) return;
+      var st = { x: e.clientX, y: e.clientY, active: false, timer: null };
+      st.timer = setTimeout(function () {
+        if (holdState !== st) return;
+        st.active = true;
+        AUI.holdSpeed = true;
+        try { v.playbackRate = 2; } catch (err) {}
+        if (AUI.holdChip) AUI.holdChip.style.display = 'block';
+        log('hold-to-2x engaged');
+      }, 380);
+      holdState = st;
+    }, true);
+    document.addEventListener('pointermove', function (e) {
+      if (!holdState || holdState.active) return;
+      if (Math.abs(e.clientX - holdState.x) > 12 || Math.abs(e.clientY - holdState.y) > 12) {
+        clearTimeout(holdState.timer);
+        holdState = null;
+      }
+    }, true);
+    function release() {
+      if (!holdState) return;
+      clearTimeout(holdState.timer);
+      var wasActive = holdState.active;
+      holdState = null;
+      if (!wasActive) return;
+      AUI.holdSpeed = false;
+      AUI.swallowNextClick = true;
+      enforceSpeed();
+      if (AUI.holdChip) AUI.holdChip.style.display = 'none';
+      log('hold-to-2x released');
+    }
+    document.addEventListener('pointerup', release, true);
+    document.addEventListener('pointercancel', release, true);
+  }
+
+  /* ---- E: chapters (from the description) + storyboard thumbs ---- */
+  var MEDIA = { chapters: [], board: null, ticks: [] };
+  function parseChapters(pr) {
+    MEDIA.chapters = [];
+    var desc = '';
+    try { desc = (pr && pr.videoDetails && pr.videoDetails.shortDescription) || ''; } catch (e) {}
+    if (!desc) return;
+    var out = [];
+    desc.split('\n').forEach(function (ln) {
+      var m = ln.match(/^\s*(?:\(|\[)?((?:\d{1,2}:)?\d{1,2}:\d{2})(?:\)|\])?\s+(?:[-\u2013\u2014:]\s*)?(.{2,80})$/);
+      if (!m) return;
+      var parts = m[1].split(':').map(function (x) { return parseInt(x, 10); });
+      var t = parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
+      var title = m[2].replace(/\s+https?:\/\/\S+$/, '').trim();
+      if (title) out.push({ t: t, title: title });
+    });
+    out.sort(function (a, b) { return a.t - b.t; });
+    if (out.length >= 2 && out[0].t <= 5) MEDIA.chapters = out;
+  }
+  function chapterAt(t) {
+    var cur = null;
+    for (var i = 0; i < MEDIA.chapters.length; i++) {
+      if (MEDIA.chapters[i].t <= t) cur = MEDIA.chapters[i]; else break;
+    }
+    return cur;
+  }
+  function parseStoryboard(pr) {
+    MEDIA.board = null;
+    try {
+      var spec = pr && pr.storyboards && pr.storyboards.playerStoryboardSpecRenderer &&
+        pr.storyboards.playerStoryboardSpecRenderer.spec;
+      if (!spec) return;
+      var parts = String(spec).split('|');
+      var base = parts[0];
+      var best = null;
+      for (var i = 1; i < parts.length; i++) {
+        var f = parts[i].split('#');
+        if (f.length < 6) continue;
+        var b = { w: +f[0], h: +f[1], count: +f[2], interval: +f[3], sigh: f[5], level: i - 1 };
+        if (!b.w || !b.h || !b.count || !b.interval) continue;
+        if (!best) best = b;
+        else if (best.h > 90 && b.h < best.h) best = b;
+        else if (b.h <= 90 && b.h > best.h) best = b;
+      }
+      if (!best) return;
+      best.base = base;
+      best.cols = 5;
+      best.perSheet = 25;
+      MEDIA.board = best;
+      log('storyboard:', best.w + 'x' + best.h, 'every', best.interval + 'ms');
+    } catch (e) {}
+  }
+  function boardThumbAt(t) {
+    var b = MEDIA.board;
+    if (!b) return null;
+    var idx = Math.floor((t * 1000) / b.interval);
+    if (idx >= b.count) idx = b.count - 1;
+    if (idx < 0) idx = 0;
+    var page = Math.floor(idx / b.perSheet);
+    var pos = idx % b.perSheet;
+    return {
+      url: b.base.replace('$L', String(b.level)).replace('$N', 'M' + page) +
+        (b.base.indexOf('?') >= 0 ? '&' : '?') + 'sigh=' + b.sigh,
+      x: (pos % b.cols) * b.w,
+      y: Math.floor(pos / b.cols) * b.h,
+      w: b.w, h: b.h,
+      sheetW: b.cols * b.w,
+      sheetH: Math.ceil(b.perSheet / b.cols) * b.h,
+    };
+  }
+  function renderChapterTicks() {
+    var track = AUI.scrubTrack;
+    if (!track || !track.children) return;
+    (MEDIA.ticks || []).forEach(function (el) {
+      try { el.remove(); } catch (e) {}
+      var p = el.parentNode || el._parent;
+      if (p && p.children) {
+        var i = p.children.indexOf(el);
+        if (i >= 0) p.children.splice(i, 1);
+      }
+    });
+    MEDIA.ticks = [];
+    var v = CAP.video;
+    var dur = v && isFinite(v.duration) ? v.duration : 0;
+    if (!dur || MEDIA.chapters.length < 2) return;
+    MEDIA.chapters.forEach(function (ch) {
+      if (ch.t <= 0) return;
+      var tick = document.createElement('div');
+      tick.__ytnfTick = true;
+      tick.style.cssText = 'position:absolute;top:0;height:100%;width:2px;background:rgba(0,0,0,.45);left:' +
+        (ch.t / dur * 100).toFixed(2) + '%;pointer-events:none;';
+      track.appendChild(tick);
+      MEDIA.ticks.push(tick);
+    });
+  }
+  function onPlayerResponse(pr) {
+    parseChapters(pr);
+    parseStoryboard(pr);
+    renderChapterTicks();
+    sbFetchFor(pr);
+  }
+  try { window.__ytnfMedia = function () { return MEDIA; }; } catch (e) {}
+  try { window.__ytnfChapterAt = chapterAt; } catch (e) {}
+  try { window.__ytnfThumbAt = boardThumbAt; } catch (e) {}
+
+  /* ---- G: update checker hookup (update-check.js) ---- */
+  var UPD = (typeof window !== 'undefined' && window.YTNFUpdate) || null;
+  function checkForUpdates(force) {
+    if (!UPD || typeof UPD.checkNow !== 'function') {
+      if (force) showToast('Update checker unavailable', 2000);
+      return;
+    }
+    try {
+      UPD.checkNow(!!force).then(function (res) {
+        if (res && res.state === 'update') {
+          AUI.updateAvail = { version: res.version, update_link: res.update_link || '' };
+          log('update available:', res.version);
+          if (force) showToast('Update available: v' + res.version + ' — see the Settings menu', 2600);
+          if (AUI.panelOpen && AUI.page === 'main') renderPanel('main');
+        } else if (force) {
+          showToast(res && res.state === 'error'
+            ? 'Update check failed'
+            : 'You are on the latest version (v' + VERSION + ')', 2200);
+        }
+      }, function () { if (force) showToast('Update check failed', 2000); });
+    } catch (e) {}
+  }
+
+  /* ---- I: diagnostics ---- */
+  function buildDiagnostics() {
+    var v = null;
+    try { v = syncVideo(); } catch (e) {}
+    var lines = [];
+    lines.push('YT Native Fullscreen for Orion — debug log');
+    lines.push('Version: ' + VERSION);
+    try { lines.push('UA: ' + navigator.userAgent); } catch (e) {}
+    try { lines.push('Page: ' + location.pathname + location.search); } catch (e) {}
+    lines.push('Video: ' + (v
+      ? 'paused=' + v.paused + ' t=' + (v.currentTime || 0).toFixed(1) + '/' +
+        (isFinite(v.duration) ? v.duration.toFixed(1) : 'live') + ' rate=' + v.playbackRate +
+        ' wireless=' + !!v.webkitCurrentPlaybackTargetIsWireless
+      : 'none'));
+    lines.push('Chapters: ' + MEDIA.chapters.length +
+      ' | Storyboard: ' + (MEDIA.board ? MEDIA.board.w + 'x' + MEDIA.board.h : 'none') +
+      ' | SB segments: ' + SB.segments.length +
+      ' | Ad showing: ' + adState.showing);
+    try {
+      lines.push('Prefs: ' + JSON.stringify({
+        quality: PREFS.quality, speed: PREFS.speed, captionLang: PREFS.captionLang,
+        liquidGlass: PREFS.liquidGlass, tapToPause: PREFS.tapToPause,
+        resumeOnExit: PREFS.resumeOnExit, autoPipScroll: PREFS.autoPipScroll,
+        sponsorBlock: PREFS.sponsorBlock, autoSkipAds: PREFS.autoSkipAds,
+        sleepMinutes: PREFS.sleepMinutes, queue: PREFS.queue.length,
+        autoplayNext: PREFS.autoplayNext,
+      }));
+    } catch (e) {}
+    lines.push('--- log ---');
+    lines.push(LOGBUF.slice(-60).join('\n'));
+    return lines.join('\n');
+  }
+  function copyDiagnostics() {
+    var text = buildDiagnostics();
+    var done = function () { showToast('Debug log copied', 2000); };
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () {
+          showToast('Copy failed — clipboard unavailable', 2200);
+        });
+        return;
+      }
+    } catch (e) {}
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;left:-9999px;top:0;';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+      done();
+    } catch (e) { showToast('Copy failed', 2000); }
+  }
+  try { window.__ytnfDiag = buildDiagnostics; } catch (e) {}
 
   /* ---------------- settings panel (single menu) ---------------- */
   function panelRow(label, value, opts) {
@@ -1497,6 +1917,42 @@
           renderPanel('main');
         },
       }));
+      if (AUI.updateAvail) {
+        panel.appendChild(panelRow('Update Available', 'v' + AUI.updateAvail.version, {
+          pick: 'update', active: true,
+          onPick: function () {
+            if (UPD && typeof UPD.openUpdate === 'function' && AUI.updateAvail.update_link) {
+              UPD.openUpdate(AUI.updateAvail.update_link);
+            } else {
+              showToast('Update v' + AUI.updateAvail.version + ' is available', 2400);
+            }
+          },
+        }));
+      }
+      panel.appendChild(panelRow('Sleep Timer', sleepLabel(), {
+        page: 'sleep', onPick: function () { renderPanel('sleep'); },
+      }));
+      panel.appendChild(panelRow('SponsorBlock', PREFS.sponsorBlock ? 'On' : 'Off', {
+        page: 'sponsorblock', onPick: function () { renderPanel('sponsorblock'); },
+      }));
+      panel.appendChild(panelRow('Auto-Skip Ads', PREFS.autoSkipAds ? 'On' : 'Off', {
+        pick: 'autoskip', active: PREFS.autoSkipAds,
+        onPick: function () {
+          PREFS.autoSkipAds = !PREFS.autoSkipAds;
+          savePrefs();
+          showToast(PREFS.autoSkipAds ? 'Auto-skip ads on' : 'Auto-skip ads off', 2000);
+          renderPanel('main');
+        },
+      }));
+      panel.appendChild(panelDivider());
+      panel.appendChild(panelRow('Check for Updates', 'v' + VERSION, {
+        pick: 'updcheck',
+        onPick: function () { checkForUpdates(true); },
+      }));
+      panel.appendChild(panelRow('Copy Debug Log', null, {
+        pick: 'diag',
+        onPick: function () { copyDiagnostics(); },
+      }));
       // YouTube's own lower-right controls, proxied.
       var actions = [];
       if (clickYtDetect('.ytp-miniplayer-button')) actions.push(['Miniplayer', 'miniplayer', ['.ytp-miniplayer-button']]);
@@ -1520,6 +1976,50 @@
           }));
         });
       }
+    } else if (page === 'sleep') {
+      panel.appendChild(panelHeader('Sleep Timer', true));
+      [[0, 'Off'], [5, '5 minutes'], [10, '10 minutes'], [15, '15 minutes'],
+       [30, '30 minutes'], [45, '45 minutes'], [60, '60 minutes'],
+       [-1, 'End of this video']].forEach(function (opt) {
+        panel.appendChild(panelRow(opt[1], null, {
+          pick: 'sleep:' + opt[0], active: PREFS.sleepMinutes === opt[0],
+          onPick: function () {
+            setSleep(opt[0]);
+            showToast(opt[0] === 0 ? 'Sleep timer off'
+              : opt[0] === -1 ? 'Sleep timer: pause at the end of this video'
+              : 'Sleep timer: ' + opt[0] + ' minutes', 2200);
+            renderPanel('sleep');
+          },
+        }));
+      });
+    } else if (page === 'sponsorblock') {
+      panel.appendChild(panelHeader('SponsorBlock', true));
+      panel.appendChild(panelRow('Skip Segments', PREFS.sponsorBlock ? 'On' : 'Off', {
+        pick: 'sbmaster', active: PREFS.sponsorBlock,
+        onPick: function () {
+          PREFS.sponsorBlock = !PREFS.sponsorBlock;
+          savePrefs();
+          SB.videoId = null;
+          if (PREFS.sponsorBlock && CAP.pr) sbFetchFor(CAP.pr);
+          renderPanel('sponsorblock');
+        },
+      }));
+      SB_CATS.forEach(function (cat) {
+        panel.appendChild(panelRow(SB_CAT_LABELS[cat], sbCatOn(cat) ? 'Skip' : 'Off', {
+          pick: 'sbcat:' + cat, active: sbCatOn(cat),
+          onPick: function () {
+            if (!PREFS.sbCats) PREFS.sbCats = {};
+            SB_CATS.forEach(function (c2) {
+              if (PREFS.sbCats[c2] === undefined) PREFS.sbCats[c2] = true;
+            });
+            PREFS.sbCats[cat] = !sbCatOn(cat);
+            savePrefs();
+            SB.videoId = null;
+            if (PREFS.sponsorBlock && CAP.pr) sbFetchFor(CAP.pr);
+            renderPanel('sponsorblock');
+          },
+        }));
+      });
     } else if (page === 'speed') {
       panel.appendChild(panelHeader('Playback Speed', true));
       SPEEDS.forEach(function (s) {
@@ -1771,11 +2271,34 @@
     if (AUI.tRemain) AUI.tRemain.textContent = '-' + fmtTime(v.duration - target);
     if (AUI.scrubBubble) {
       var delta = target - (v.currentTime || 0);
-      AUI.scrubBubble.textContent = fmtTime(target) +
-        (delta >= 1 ? '  (+' + fmtTime(delta) + ')' :
-          delta <= -1 ? '  (-' + fmtTime(-delta) + ')' : '');
+      var ch = chapterAt(target);
+      if (AUI.scrubBubbleText) {
+        AUI.scrubBubbleText.textContent = fmtTime(target) +
+          (delta >= 1 ? '  (+' + fmtTime(delta) + ')' :
+            delta <= -1 ? '  (-' + fmtTime(-delta) + ')' : '') +
+          (ch ? ' · ' + ch.title : '');
+      }
+      var thumbShown = false;
+      if (AUI.scrubThumb) {
+        var th = boardThumbAt(target);
+        if (th) {
+          var scale = Math.min(1, 160 / th.w);
+          AUI.scrubThumb.style.display = 'block';
+          AUI.scrubThumb.style.width = Math.round(th.w * scale) + 'px';
+          AUI.scrubThumb.style.height = Math.round(th.h * scale) + 'px';
+          AUI.scrubThumb.style.backgroundImage = 'url("' + th.url + '")';
+          AUI.scrubThumb.style.backgroundSize =
+            Math.round(th.sheetW * scale) + 'px ' + Math.round(th.sheetH * scale) + 'px';
+          AUI.scrubThumb.style.backgroundPosition =
+            '-' + Math.round(th.x * scale) + 'px -' + Math.round(th.y * scale) + 'px';
+          thumbShown = true;
+        } else {
+          AUI.scrubThumb.style.display = 'none';
+        }
+      }
+      var half = thumbShown ? 86 : 42;
       AUI.scrubBubble.style.left =
-        Math.min(rect.width - 36, Math.max(36, frac * rect.width)) + 'px';
+        Math.min(rect.width - half, Math.max(half, frac * rect.width)) + 'px';
     }
     var now = Date.now();
     if (final || !AUI.lastSeekAt || now - AUI.lastSeekAt >= 90) {
@@ -2115,8 +2638,14 @@
       var bubble = document.createElement('div');
       bubble.style.cssText = GLASS + FONT +
         'position:absolute;bottom:54px;left:36px;transform:translateX(-50%);' +
-        'padding:5px 11px;border-radius:999px;font-size:12.5px;font-weight:600;' +
-        'font-variant-numeric:tabular-nums;white-space:nowrap;display:none;';
+        'display:none;flex-direction:column;align-items:center;gap:5px;' +
+        'padding:7px 9px;border-radius:14px;';
+      var bThumb = document.createElement('div');
+      bThumb.style.cssText = 'display:none;border-radius:8px;background-repeat:no-repeat;background-color:rgba(255,255,255,.08);';
+      var bLabel = document.createElement('span');
+      bLabel.style.cssText = 'font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;';
+      bubble.appendChild(bThumb);
+      bubble.appendChild(bLabel);
       scrub.appendChild(bubble);
       var tRemain = document.createElement('span');
       tRemain.style.cssText = 'font-size:13px;font-weight:500;font-variant-numeric:tabular-nums;min-width:46px;color:rgba(255,255,255,.85);';
@@ -2304,7 +2833,7 @@
         AUI.wasPlaying = !v.paused && !v.ended;
         if (AUI.wasPlaying) { try { v.pause(); } catch (err) {} }
         knob.style.transform = 'translate(-50%,-50%) scale(1.35)';
-        if (AUI.scrubBubble) AUI.scrubBubble.style.display = 'block';
+        if (AUI.scrubBubble) AUI.scrubBubble.style.display = 'flex';
         scrubTo(e.clientX);
         showUI();
       });
@@ -2361,8 +2890,16 @@
       AUI.gearBtn = gearBtn; AUI.fsBtn = fsBtn; AUI.miniBtn = miniBtn; AUI.pipBtn = pipBtn;
       AUI.scrub = scrub; AUI.scrubFill = fill; AUI.scrubKnob = knob; AUI.hairFill = hairFill;
       AUI.scrubBubble = bubble; AUI.scrubTrack = track;
+      AUI.scrubThumb = bThumb; AUI.scrubBubbleText = bLabel;
       AUI.topBar = topBar; AUI.topPillL = topPillL; AUI.topPillR = topPillR;
       AUI.volPill = volPill; AUI.volTrack = volTrack; AUI.volFill = volFill;
+      var holdChip = document.createElement('div');
+      holdChip.textContent = '2×';
+      holdChip.style.cssText = GLASS + FONT +
+        'position:absolute;top:64px;left:50%;transform:translateX(-50%);' +
+        'padding:6px 14px;border-radius:999px;font-size:14px;font-weight:700;display:none;pointer-events:none;';
+      root.appendChild(holdChip);
+      AUI.holdChip = holdChip;
       AUI.volKnob = volKnob; AUI.volBtn = volBtn; AUI.airplayBtn = airplayBtn;
       AUI.gearPill = gearPill;
       AUI.tElapsed = tElapsed; AUI.tRemain = tRemain;
@@ -2374,13 +2911,14 @@
       wireScrollPip(player);
       if (!layoutPollStarted && typeof setInterval === 'function') {
         layoutPollStarted = true;
-        setInterval(function () { refreshLayout(); syncVideo(); }, 1000);
+        setInterval(function () { refreshLayout(); syncVideo(); refreshAdState(); }, 1000);
       }
       refreshLayout();
       applyLayoutMode();
 
       player.appendChild(root);
       wireTapToggle();
+      wireHoldSpeed();
       wireQueueTouchDrag();
       ensureBelowPlayerGlass();
       try { if (player.classList) player.classList.add('ytnf-on'); } catch (e) {}
@@ -2444,6 +2982,15 @@
     });
     document.addEventListener('click', function (e) {
       if (!AUI.root) return; // overlay not mounted: stock YouTube behaviour
+      if (AUI.swallowNextClick) {
+        // The click that ends a hold-to-2x gesture: it belongs to
+        // the hold, not to the tap system.
+        AUI.swallowNextClick = false;
+        e.__ytnfTap = true;
+        try { e.stopPropagation(); } catch (err) {}
+        try { e.preventDefault(); } catch (err) {}
+        return;
+      }
       // Menu open? A tap anywhere outside the panel — elsewhere in
       // the player or anywhere else on the page — puts the menu
       // away (Kurt, Nov 25). The gear button is exempt: it toggles
@@ -2614,19 +3161,15 @@
    * re-check re-applies it whenever YouTube rebuilds the nodes. */
   var BELOW_GLASS = {
     panel:
-      ':host { background: rgba(22,22,27,.55) !important;' +
-      ' -webkit-backdrop-filter: blur(20px) saturate(180%);' +
-      ' backdrop-filter: blur(20px) saturate(180%);' +
-      ' border: 1px solid rgba(255,255,255,.12) !important;' +
-      ' border-radius: 16px !important; }' +
-      ' #container, #items, #header { background: transparent !important; }',
-    metadata:
-      '#description { background: rgba(28,28,32,.5) !important;' +
-      ' -webkit-backdrop-filter: blur(16px) saturate(170%);' +
-      ' backdrop-filter: blur(16px) saturate(170%);' +
-      ' border: 1px solid rgba(255,255,255,.09) !important;' +
+      ':host { background: rgba(30,30,34,.94) !important;' +
+      ' border: 1px solid rgba(255,255,255,.10) !important;' +
       ' border-radius: 12px !important; }' +
-      ' ytd-text-inline-expander { background: transparent !important; }' +
+      ' #header { background: rgba(30,30,34,.94) !important;' +
+      ' border-bottom: 1px solid rgba(255,255,255,.07) !important; }',
+    metadata:
+      '#description { background: rgba(30,30,34,.94) !important;' +
+      ' border: 1px solid rgba(255,255,255,.08) !important;' +
+      ' border-radius: 12px !important; }' +
       ' #title h1 { font-weight: 600; letter-spacing: -.01em; }',
   };
   function injectShadowGlass(host, cssText) {
@@ -2657,11 +3200,11 @@
       var panel = document.querySelector('ytd-playlist-panel-renderer');
       if (panel) {
         try {
-          panel.style.background = 'rgba(22,22,27,.55)';
-          panel.style.backdropFilter = 'blur(20px) saturate(180%)';
-          panel.style.webkitBackdropFilter = 'blur(20px) saturate(180%)';
-          panel.style.border = '1px solid rgba(255,255,255,.12)';
-          panel.style.borderRadius = '16px';
+          panel.style.background = 'rgba(30,30,34,.94)';
+          panel.style.backdropFilter = '';
+          panel.style.webkitBackdropFilter = '';
+          panel.style.border = '1px solid rgba(255,255,255,.10)';
+          panel.style.borderRadius = '12px';
         } catch (err) {}
         injectShadowGlass(panel, BELOW_GLASS.panel);
       }
@@ -2676,6 +3219,7 @@
     try { belowGlassTimer = setInterval(styleBelowPlayer, 2500); } catch (err) {}
   }
   try { window.__ytnfStyleBelow = styleBelowPlayer; } catch (err) {}
+  try { window.__ytnfBelowGlass = BELOW_GLASS; } catch (err) {}
 
   /* ================================================================
    * Watch-page setup / navigation
@@ -2697,6 +3241,8 @@
 
   var setupForId = null; // videoId the live overlay was built for
   function setupWatch() {
+    armSleepTimer();
+    checkForUpdates(false);
     var vid = isWatchPage() ? currentVideoId() : null;
     // One navigation fires setupWatch up to three times (document +
     // window yt-navigate-finish, plus the href poll). If the overlay
@@ -2751,6 +3297,7 @@
         CAP.pr = pr;
         var v = syncVideo();
         if (v) loadCaptions(v, player, pr);
+        onPlayerResponse(pr);
         applyQuality(player, gen);
         return;
       }

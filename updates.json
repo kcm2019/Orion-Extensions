@@ -119,6 +119,14 @@
           "update_link": "https://muse.ai/files/665768643292256/1675026043980957/2twn1hod6ueul6ckzlxxnmzq/heckyeah-orion-0.12.6.xpi"
         }
       ]
+    },
+    "yt-native-fullscreen@local": {
+      "updates": [
+        {
+          "version": "2.14.0",
+          "update_link": "https://muse.ai/files/665768643292256/4698597577127514/4smrzwusbzm4swxp1k6bf3r5/yt-native-fullscreen-orion-2.14.0.xpi"
+        }
+      ]
     }
   }
 }

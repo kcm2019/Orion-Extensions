@@ -336,7 +336,11 @@ const okFetch = (env) => (u) => {
     vm.runInContext(src, env.sandbox);
     await flush();
     assert.strictEqual(video.children.length, 3, 'all 3 tracks attached');
-    assert.ok(env.fetched.every((u) => u.includes('fmt=vtt') && !u.includes('srv3')));
+    // Caption fetches must all be WebVTT (other features may fetch
+    // their own endpoints — e.g. SponsorBlock, v2.14).
+    const capFetches = env.fetched.filter((u) => u.includes('timedtext'));
+    assert.ok(capFetches.length >= 3, 'caption tracks were fetched');
+    assert.ok(capFetches.every((u) => u.includes('fmt=vtt') && !u.includes('srv3')));
     const pref = video.children.find((c) => c.default === true || 'default' in c.attrs);
     assert.ok(pref && pref.srclang === 'en' && pref.track.mode === 'hidden');
     console.log('PASS 6 caption tracks attached, preferred=default+hidden');
@@ -551,7 +555,7 @@ const okFetch = (env) => (u) => {
     // target; the exact seek lands on release.
     const AUI19 = env.sandbox.window.__ytnfAUI;
     assert.strictEqual(AUI19.scrubFill.style.width, '75.00%', 'bar follows the finger mid-drag');
-    assert.ok(AUI19.scrubBubble.textContent.includes('1:15'), 'bubble shows target time: ' + AUI19.scrubBubble.textContent);
+    assert.ok(AUI19.scrubBubbleText.textContent.includes('1:15'), 'bubble shows target time: ' + AUI19.scrubBubbleText.textContent);
     (env.listeners.pointerup || []).forEach((fn) => fn({}));
     assert.strictEqual(video.currentTime, 75, 'release lands the exact seek at 75%');
     assert.strictEqual(video.paused, false, 'release resumes playback');
@@ -594,7 +598,7 @@ const okFetch = (env) => (u) => {
     }
     const mf = JSON.parse(fs.readFileSync(__dirname + '/../manifest.json', 'utf8'));
     assert.ok(mf.content_scripts[0].css.includes('player.css'), 'manifest loads player.css');
-    assert.strictEqual(mf.version, '2.13.0');
+    assert.strictEqual(mf.version, '2.14.0');
     console.log('PASS 16 reskin is paint-only, no YouTube control hidden or removed');
   }
 
@@ -1503,7 +1507,7 @@ const okFetch = (env) => (u) => {
       'panel shadow glass injected');
     assert.ok(metaHost.shadowRoot.children.some((c) => String(c.textContent || '').includes('#description')),
       'description shadow glass injected');
-    assert.strictEqual(panelHost.style.background, 'rgba(22,22,27,.55)', 'panel host inline glass set');
+    assert.strictEqual(panelHost.style.background, 'rgba(30,30,34,.94)', 'panel host inline glass set');
     env.sandbox.window.__ytnfStyleBelow();
     assert.strictEqual(panelHost.shadowRoot.children.length, 1, 'no duplicate panel style');
     assert.strictEqual(metaHost.shadowRoot.children.length, 1, 'no duplicate metadata style');
@@ -1534,5 +1538,263 @@ const okFetch = (env) => (u) => {
     console.log('PASS 50 AirPlay glyph glows blue while wireless');
   }
 
-  console.log('ALL 50 TESTS PASS');
+  // 51. Sleep timer (v2.14 A): picking a duration arms a persisted
+  // deadline; an expired deadline pauses playback; the
+  // end-of-video mode stops instead of advancing the queue.
+  {
+    const video = makeVideo();
+    const env = makeEnv({ video, playerResponse: captionPR([ytTrack('en', '', 'English')]) });
+    env.sandbox.fetch = okFetch(env);
+    vm.runInContext(src, env.sandbox);
+    await flush();
+    const root = env.player.children.find((c) => c.id === 'ytnf-apple');
+    findAll(root, (c) => c.dataset && c.dataset.act === 'menu')[0].click();
+    findAll(root, (c) => c.dataset && c.dataset.page === 'sleep')[0].click();
+    findAll(root, (c) => c.dataset && c.dataset.pick === 'sleep:10')[0].click();
+    const saved = env.storageSetCalls.map((c) => c.ytnf_prefs).filter(Boolean).pop();
+    assert.strictEqual(saved.sleepMinutes, 10, 'sleep minutes saved');
+    assert.ok(Math.abs(saved.sleepDeadline - (Date.now() + 600000)) < 5000, 'deadline ~10 min out');
+
+    // A deadline still ahead when the page loads fires on time.
+    const video2 = makeVideo();
+    video2.paused = false;
+    const env2 = makeEnv({
+      video: video2,
+      playerResponse: captionPR([ytTrack('en', '', 'English')]),
+      initialPrefs: { sleepMinutes: 1, sleepDeadline: Date.now() + 400 },
+    });
+    env2.sandbox.fetch = okFetch(env2);
+    vm.runInContext(src, env2.sandbox);
+    await flush();
+    // The harness stubs setInterval out, so drive the tick by hand
+    // once the deadline has passed in real time.
+    await new Promise((r) => setTimeout(r, 600));
+    env2.sandbox.window.__ytnfSleepTick();
+    assert.strictEqual(video2.paused, true, 'sleep timer fires and pauses playback');
+
+    // A deadline that expired while the page was away is cleared
+    // quietly — it must not pause a freshly opened video.
+    const video2b = makeVideo();
+    video2b.paused = false;
+    const env2b = makeEnv({
+      video: video2b,
+      playerResponse: captionPR([ytTrack('en', '', 'English')]),
+      initialPrefs: { sleepMinutes: 10, sleepDeadline: Date.now() - 1000 },
+    });
+    env2b.sandbox.fetch = okFetch(env2b);
+    vm.runInContext(src, env2b.sandbox);
+    await flush();
+    assert.strictEqual(video2b.paused, false, 'stale deadline does not pause a fresh video');
+    const saved2b = env2b.storageSetCalls.map((c) => c.ytnf_prefs).filter(Boolean).pop();
+    assert.strictEqual(saved2b.sleepDeadline, 0, 'stale deadline cleared');
+
+    const video3 = makeVideo();
+    const env3 = makeEnv({
+      video: video3,
+      playerResponse: captionPR([ytTrack('en', '', 'English')]),
+      initialPrefs: { sleepMinutes: -1, queue: [{ id: 'later1', title: 'Later' }] },
+    });
+    env3.sandbox.fetch = okFetch(env3);
+    vm.runInContext(src, env3.sandbox);
+    await flush();
+    (video3.listeners.ended || []).forEach((fn) => fn());
+    assert.strictEqual(video3.paused, true, 'end-of-video sleep stops playback');
+    const saved3 = env3.storageSetCalls.map((c) => c.ytnf_prefs).filter(Boolean).pop();
+    assert.strictEqual(saved3.queue.length, 1, 'queue was NOT advanced past the sleep stop');
+    console.log('PASS 51 sleep timer: arm, expire, end-of-video');
+  }
+
+  // 52. SponsorBlock (v2.14 B): segments load for the video and
+  // timeupdate seeks past them; rewinding before a segment
+  // re-arms it.
+  {
+    const video = makeVideo();
+    const pr = captionPR([ytTrack('en', '', 'English')]);
+    pr.videoDetails.shortDescription = ''; // videoId stays 'abc123' (the page's id)
+    const env = makeEnv({ video, playerResponse: pr });
+    const vtt = okFetch(env);
+    env.sandbox.fetch = (url) => {
+      if (String(url).includes('sponsor.ajay.app')) {
+        return Promise.resolve({ ok: true, json: async () => ([{ segment: [10, 20], category: 'sponsor', UUID: 'u1' }]) });
+      }
+      return vtt(url);
+    };
+    vm.runInContext(src, env.sandbox);
+    await flush();
+    const SB = env.sandbox.window.__ytnfSB();
+    assert.strictEqual(SB.segments.length, 1, 'segment loaded');
+    video.paused = false;
+    video.currentTime = 12;
+    (video.listeners.timeupdate || []).forEach((fn) => fn());
+    assert.strictEqual(video.currentTime, 20, 'sponsor segment skipped');
+    video.currentTime = 5;
+    (video.listeners.timeupdate || []).forEach((fn) => fn());
+    video.currentTime = 12;
+    (video.listeners.timeupdate || []).forEach((fn) => fn());
+    assert.strictEqual(video.currentTime, 20, 'segment re-arms after a rewind');
+    console.log('PASS 52 SponsorBlock: load + skip + re-arm');
+  }
+
+  // 53. Ads (v2.14 C): while an ad shows, the overlay steps aside
+  // (YouTube chrome incl. Skip restored) and the skip button is
+  // auto-clicked; when the ad ends, the overlay returns.
+  {
+    const video = makeVideo();
+    const env = makeEnv({ video, playerResponse: captionPR([ytTrack('en', '', 'English')]) });
+    env.sandbox.fetch = okFetch(env);
+    vm.runInContext(src, env.sandbox);
+    await flush();
+    const AUI = env.sandbox.window.__ytnfAUI;
+    env.sandbox.MouseEvent = class { constructor(type, opts) { this.type = type; this.opts = opts; } };
+    const skipBtn = { _n: 0, dispatchEvent() { this._n++; return true; } };
+    const origQS = env.player.querySelector.bind(env.player);
+    env.player.querySelector = (sel) => (String(sel).includes('skip-ad') ? skipBtn : origQS(sel));
+    env.player.classList.add('ad-showing');
+    env.sandbox.window.__ytnfAdRefresh();
+    assert.strictEqual(AUI.root.style.display, 'none', 'overlay hidden during the ad');
+    assert.ok(!env.player.classList.contains('ytnf-on'), 'YouTube chrome restored during the ad');
+    assert.ok(skipBtn._n >= 1, 'skip button auto-clicked');
+    env.player.classList.remove('ad-showing');
+    env.sandbox.window.__ytnfAdRefresh();
+    assert.strictEqual(AUI.root.style.display, '', 'overlay restored after the ad');
+    assert.ok(env.player.classList.contains('ytnf-on'), 'our chrome back after the ad');
+    console.log('PASS 53 ads: step aside + auto-skip + restore');
+  }
+
+  // 54. Hold-to-2x (v2.14 D): a held press on the video doubles
+  // the rate until release; the release click is swallowed.
+  {
+    const video = makeVideo();
+    video.paused = false;
+    const env = makeEnv({ video, playerResponse: captionPR([ytTrack('en', '', 'English')]) });
+    env.sandbox.fetch = okFetch(env);
+    vm.runInContext(src, env.sandbox);
+    await flush();
+    const AUI = env.sandbox.window.__ytnfAUI;
+    const videoTap = { closest: (sel) => (sel.includes('#movie_player') ? {} : null) };
+    const fireDoc = (type, ev) => (env.listeners[type] || []).forEach((fn) => fn(ev));
+    const evBase = { stopPropagation() {}, preventDefault() {} };
+    fireDoc('pointerdown', Object.assign({ target: videoTap, clientX: 100, clientY: 100 }, evBase));
+    await new Promise((r) => setTimeout(r, 500));
+    assert.strictEqual(video.playbackRate, 2, 'hold engaged 2x');
+    assert.strictEqual(AUI.holdChip.style.display, 'block', '2x chip shown');
+    fireDoc('pointerup', Object.assign({ target: videoTap, clientX: 100, clientY: 100 }, evBase));
+    assert.strictEqual(video.playbackRate, 1, 'release restores the preferred speed');
+    assert.strictEqual(AUI.holdChip.style.display, 'none', 'chip hidden on release');
+    assert.strictEqual(AUI.swallowNextClick, true, 'release click marked for swallowing');
+    fireDoc('click', Object.assign({ target: videoTap, clientX: 100, clientY: 100 }, evBase));
+    assert.strictEqual(AUI.swallowNextClick, false, 'click swallowed');
+    assert.strictEqual(AUI.visible, false, 'swallowed click did not toggle the UI');
+    console.log('PASS 54 hold-to-2x: engage, release, swallow');
+  }
+
+  // 55. Chapters + storyboards (v2.14 E): chapters parse from the
+  // description, ticks land on the scrub track, and storyboard
+  // frames resolve to sheet URLs/positions.
+  {
+    const video = makeVideo();
+    video.duration = 600;
+    const pr = captionPR([ytTrack('en', '', 'English')]);
+    pr.videoDetails.shortDescription =
+      '0:00 Intro\n2:30 Setup\n5:00 Deep Dive\nSome links below';
+    pr.storyboards = {
+      playerStoryboardSpecRenderer: {
+        spec: 'https://i.ytimg.com/sb/chap1/storyboard3_L$L/$N.jpg|160#90#40#10000#0#sighX',
+      },
+    };
+    const env = makeEnv({ video, playerResponse: pr });
+    env.sandbox.fetch = okFetch(env);
+    vm.runInContext(src, env.sandbox);
+    await flush();
+    (video.listeners.loadedmetadata || []).forEach((fn) => fn());
+    const AUI = env.sandbox.window.__ytnfAUI;
+    const MEDIA = env.sandbox.window.__ytnfMedia();
+    assert.strictEqual(MEDIA.chapters.length, 3, 'chapters parsed');
+    assert.strictEqual(env.sandbox.window.__ytnfChapterAt(200).title, 'Setup', 'chapter lookup');
+    const ticks = AUI.scrubTrack.children.filter((c) => c.__ytnfTick);
+    assert.strictEqual(ticks.length, 2, 'chapter ticks on the scrub track');
+    assert.ok(MEDIA.board && MEDIA.board.h === 90, 'storyboard board parsed');
+    const th = env.sandbox.window.__ytnfThumbAt(25);
+    assert.ok(th.url.includes('storyboard3_L0/M0.jpg'), 'thumb sheet URL: ' + th.url);
+    assert.ok(th.url.includes('sigh=sighX'), 'thumb sigh present');
+    assert.strictEqual(th.x, 320, 'thumb frame x');
+    assert.strictEqual(th.y, 0, 'thumb frame y');
+    console.log('PASS 55 chapters + storyboard thumbnails');
+  }
+
+  // 56. Update checker (v2.14 G): the feed is read, a newer
+  // version is picked, and content.js surfaces it in Settings.
+  {
+    const video = makeVideo();
+    const env = makeEnv({ video, playerResponse: captionPR([ytTrack('en', '', 'English')]) });
+    const vtt = okFetch(env);
+    env.sandbox.fetch = (url) => {
+      if (String(url).includes('raw.githubusercontent.com')) {
+        return Promise.resolve({
+          ok: true, status: 200,
+          json: async () => ({ addons: { 'yt-native-fullscreen@local': { updates: [{ version: '2.15.0', update_link: 'https://example.com/yt-2.15.0.xpi' }] } } }),
+        });
+      }
+      return vtt(url);
+    };
+    const updSrc = fs.readFileSync(__dirname + '/../update-check.js', 'utf8');
+    vm.runInContext(updSrc, env.sandbox);
+    vm.runInContext(src, env.sandbox);
+    await flush();
+    await flush();
+    const UPD = env.sandbox.window.YTNFUpdate;
+    assert.ok(UPD, 'update checker loaded');
+    assert.strictEqual(UPD.compareVersions('2.14.0', '2.9.0'), 1, 'version compare');
+    const AUI = env.sandbox.window.__ytnfAUI;
+    assert.ok(AUI.updateAvail && AUI.updateAvail.version === '2.15.0', 'newer version surfaced');
+    const root = env.player.children.find((c) => c.id === 'ytnf-apple');
+    findAll(root, (c) => c.dataset && c.dataset.act === 'menu')[0].click();
+    assert.ok(findAll(root, (c) => c.dataset && c.dataset.pick === 'update').length === 1,
+      'update row in Settings');
+    console.log('PASS 56 update checker: feed, pick, settings row');
+  }
+
+  // 57. Diagnostics (v2.14 I): the debug log snapshot carries the
+  // version, state and the ring-buffer log.
+  {
+    const video = makeVideo();
+    const env = makeEnv({ video, playerResponse: captionPR([ytTrack('en', '', 'English')]) });
+    env.sandbox.fetch = okFetch(env);
+    vm.runInContext(src, env.sandbox);
+    await flush();
+    const d = env.sandbox.window.__ytnfDiag();
+    assert.ok(d.includes('Version: 2.14.0'), 'diag version');
+    assert.ok(d.includes('Prefs:'), 'diag prefs');
+    assert.ok(d.includes('--- log ---'), 'diag log section');
+    const root = env.player.children.find((c) => c.id === 'ytnf-apple');
+    findAll(root, (c) => c.dataset && c.dataset.act === 'menu')[0].click();
+    assert.ok(findAll(root, (c) => c.dataset && c.dataset.pick === 'diag').length === 1,
+      'Copy Debug Log row in Settings');
+    console.log('PASS 57 diagnostics snapshot + settings row');
+  }
+
+  // 58. Below-player rebuild (v2.14): near-solid grouped cards,
+  // no backdrop blur, no forced-transparent internals; manifest
+  // loads the update checker and allows the SponsorBlock API.
+  {
+    const video = makeVideo();
+    const env = makeEnv({ video, playerResponse: captionPR([ytTrack('en', '', 'English')]) });
+    env.sandbox.fetch = okFetch(env);
+    vm.runInContext(src, env.sandbox);
+    await flush();
+    const bg = env.sandbox.window.__ytnfBelowGlass;
+    assert.ok(bg.panel.includes('rgba(30,30,34'), 'panel is the near-solid card');
+    assert.ok(!bg.panel.includes('backdrop-filter'), 'no blur over the scrolling queue');
+    assert.ok(!bg.panel.includes('#items'), 'panel internals not forced transparent');
+    assert.ok(bg.metadata.includes('#description'), 'description styled');
+    assert.ok(!bg.metadata.includes('backdrop-filter'), 'description has no blur');
+    const css = fs.readFileSync(__dirname + '/../player.css', 'utf8');
+    assert.ok(css.includes('rgba(10, 132, 255, 0.16)'), 'selected queue row is blue-tinted');
+    const mf = JSON.parse(fs.readFileSync(__dirname + '/../manifest.json', 'utf8'));
+    assert.ok(mf.content_scripts[0].js.includes('update-check.js'), 'manifest loads update-check.js first');
+    assert.ok(mf.permissions.includes('*://sponsor.ajay.app/*'), 'manifest allows the SponsorBlock API');
+    console.log('PASS 58 below-player rebuild values + manifest');
+  }
+
+  console.log('ALL 58 TESTS PASS');
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });

@@ -133,6 +133,10 @@
         {
           "version": "2.15.0",
           "update_link": "https://muse.ai/files/665768643292256/3704464353091280/uop3cdx9rd3khqifrfusv79y/yt-native-fullscreen-orion-2.15.0.xpi"
+        },
+        {
+          "version": "2.16.0",
+          "update_link": "https://muse.ai/files/665768643292256/1144556318325860/5dihuicpd2ddz9tyjefhidu4/yt-native-fullscreen-orion-2.16.0.xpi"
         }
       ]
     }

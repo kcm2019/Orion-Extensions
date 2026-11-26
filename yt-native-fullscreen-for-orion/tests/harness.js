@@ -598,7 +598,7 @@ const okFetch = (env) => (u) => {
     }
     const mf = JSON.parse(fs.readFileSync(__dirname + '/../manifest.json', 'utf8'));
     assert.ok(mf.content_scripts[0].css.includes('player.css'), 'manifest loads player.css');
-    assert.strictEqual(mf.version, '2.15.0');
+    assert.strictEqual(mf.version, '2.16.0');
     console.log('PASS 16 reskin is paint-only, no YouTube control hidden or removed');
   }
 
@@ -1413,16 +1413,17 @@ const okFetch = (env) => (u) => {
     const base = { stopPropagation() {}, preventDefault() {} };
     fire('pointerdown', Object.assign({ target: itemA, clientX: 10, clientY: 10 }, base));
     fire('pointermove', Object.assign({ target: itemA, clientX: 10, clientY: 75 }, base));
-    assert.ok(itemA._evs.includes('dragstart'), 'dragstart fired on the dragged item');
+    assert.ok(!itemA._evs.includes('dragstart'), 'no dragstart during the move (single-shot commit)');
     assert.strictEqual(itemA.style.transform, 'translateY(65px)', 'row rides the finger');
     assert.ok(itemA._classes.has('ytnf-dragging'), 'dragged row lifted (class)');
     assert.strictEqual(itemB.style.transform, 'translateY(-60px)', 'sibling shifts out of the way');
     fire('pointerup', Object.assign({ target: itemA, clientX: 10, clientY: 75 }, base));
+    assert.deepStrictEqual(itemA._evs, ['dragstart', 'dragend'], 'lifecycle fired in one shot at release');
+    assert.ok(itemB._evs.includes('dragover'), 'dragover fired on the target row');
     assert.ok(itemB._evs.includes('drop'), 'drop fired on the target row');
-    assert.ok(itemA._evs.includes('dragend'), 'dragend fired on the dragged item');
     assert.strictEqual(itemA.style.transform, '', 'transforms cleaned up');
     assert.ok(!itemA._classes.has('ytnf-dragging'), 'lift class removed');
-    console.log('PASS 48 queue panel: visual touch drag + synthetic drop');
+    console.log('PASS 48 queue panel: visual drag, single-shot commit');
   }
 
   // 49. Below-player glass (v2.12): the description lives inside
@@ -1682,7 +1683,7 @@ const okFetch = (env) => (u) => {
       if (String(url).includes('raw.githubusercontent.com')) {
         return Promise.resolve({
           ok: true, status: 200,
-          json: async () => ({ addons: { 'yt-native-fullscreen@local': { updates: [{ version: '2.16.0', update_link: 'https://example.com/yt-2.16.0.xpi' }] } } }),
+          json: async () => ({ addons: { 'yt-native-fullscreen@local': { updates: [{ version: '2.17.0', update_link: 'https://example.com/yt-2.17.0.xpi' }] } } }),
         });
       }
       return vtt(url);
@@ -1696,7 +1697,7 @@ const okFetch = (env) => (u) => {
     assert.ok(UPD, 'update checker loaded');
     assert.strictEqual(UPD.compareVersions('2.14.0', '2.9.0'), 1, 'version compare');
     const AUI = env.sandbox.window.__ytnfAUI;
-    assert.ok(AUI.updateAvail && AUI.updateAvail.version === '2.16.0', 'newer version surfaced');
+    assert.ok(AUI.updateAvail && AUI.updateAvail.version === '2.17.0', 'newer version surfaced');
     const root = env.player.children.find((c) => c.id === 'ytnf-apple');
     findAll(root, (c) => c.dataset && c.dataset.act === 'menu')[0].click();
     assert.ok(findAll(root, (c) => c.dataset && c.dataset.pick === 'update').length === 1,
@@ -1713,7 +1714,7 @@ const okFetch = (env) => (u) => {
     vm.runInContext(src, env.sandbox);
     await flush();
     const d = env.sandbox.window.__ytnfDiag();
-    assert.ok(d.includes('Version: 2.15.0'), 'diag version');
+    assert.ok(d.includes('Version: 2.16.0'), 'diag version');
     assert.ok(d.includes('Prefs:'), 'diag prefs');
     assert.ok(d.includes('--- log ---'), 'diag log section');
     const root = env.player.children.find((c) => c.id === 'ytnf-apple');
@@ -1788,7 +1789,9 @@ const okFetch = (env) => (u) => {
     const toast = env.player.children.find((c) => c.id === 'ytnf-toast');
     assert.ok(toast, 'toast attached to the player');
     assert.ok(toast.style.cssText.includes('bottom:124px'), 'padded above the scrub bar');
-    assert.ok(toast.style.cssText.includes('translateX(-50%)'), 'centred');
+    assert.ok(toast.style.cssText.includes('translate(-50%'), 'centred');
+    assert.ok(toast.style.cssText.includes('transition:opacity .25s ease'), 'fades like the player chrome');
+    assert.ok(toast.style.cssText.includes('opacity:0'), 'starts transparent for the fade-in');
     assert.ok(toast.style.cssText.includes('blur(24px)'), 'glass blur');
     assert.ok(toast.style.cssText.includes('padding:11px 18px'), 'padded');
     console.log('PASS 60 toast above the scrub bar, liquid glass');
@@ -1815,5 +1818,52 @@ const okFetch = (env) => (u) => {
     console.log('PASS 61 metadata grouped card + inset description');
   }
 
-  console.log('ALL 59 TESTS PASS');
+  // 62. Queue Liquid Glass (v2.16, Kurt): with the toggle on,
+  // the panel wears the player's liquid glass (sheen + blur);
+  // off, it keeps the near-solid card.
+  {
+    const video = makeVideo();
+    const env = makeEnv({
+      video,
+      playerResponse: captionPR([ytTrack('en', '', 'English')]),
+      initialPrefs: { liquidGlass: true },
+    });
+    env.sandbox.fetch = okFetch(env);
+    vm.runInContext(src, env.sandbox);
+    await flush();
+    const mkShadow = () => ({
+      children: [],
+      appendChild(c) { this.children.push(c); return c; },
+      querySelector(sel) {
+        if (String(sel).includes('data-ytnf-glass')) {
+          return this.children.find((c) => c.__ytnfGlass) || null;
+        }
+        return null;
+      },
+    });
+    const panelHost = { shadowRoot: mkShadow(), style: {} };
+    const doc = env.sandbox.document;
+    const origQS = doc.querySelector.bind(doc);
+    doc.querySelector = (sel) => (sel === 'ytd-playlist-panel-renderer' ? panelHost : origQS(sel));
+    env.sandbox.window.__ytnfStyleBelow();
+    assert.ok(String(panelHost.style.backdropFilter).includes('blur(24px)'), 'panel host blurs (liquid)');
+    assert.ok(String(panelHost.style.background).includes('linear-gradient'), 'panel host sheen (liquid)');
+    const st = panelHost.shadowRoot.children[0];
+    assert.ok(st && st.textContent.includes('backdrop-filter'), 'shadow glass is the liquid variant');
+    const bg = env.sandbox.window.__ytnfBelowGlass;
+    assert.ok(bg.panelLiquid.includes('linear-gradient'), 'liquid variant defined');
+    assert.ok(!bg.panel.includes('backdrop-filter'), 'classic variant stays near-solid');
+    console.log('PASS 62 queue panel: true Liquid Glass with the toggle on');
+  }
+
+  // 63. Popup menus (v2.16): the queue rows' three-dot menu
+  // component gets the glass treatment in player.css.
+  {
+    const css = fs.readFileSync(__dirname + '/../player.css', 'utf8');
+    assert.ok(css.includes('ytd-menu-popup-renderer'), 'menu popup styled');
+    assert.ok(css.includes('tp-yt-paper-listbox'), 'menu listbox transparent over the glass');
+    console.log('PASS 63 popup menus: glass UI');
+  }
+
+  console.log('ALL 61 TESTS PASS');
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });

@@ -1,5 +1,5 @@
 'use strict';
-/* YT Native Fullscreen for Orion v2.15.0 (Firefox MV2)
+/* YT Native Fullscreen for Orion v2.16.0 (Firefox MV2)
  *
  * v1.0: fullscreen a YouTube video -> iOS native player, via
  *   video.webkitEnterFullscreen() called synchronously in the tap.
@@ -54,7 +54,7 @@
     large: '480p', medium: '360p', small: '240p', tiny: '144p',
   };
 
-  var VERSION = '2.15.0';
+  var VERSION = '2.16.0';
   var LOGBUF = [];
   function log() {
     var msg = '';
@@ -579,7 +579,9 @@
           'linear-gradient(rgba(22,22,27,.44),rgba(22,22,27,.44))'
         : 'rgba(28,28,30,.42)';
       el.style.cssText =
-        'position:absolute;left:50%;transform:translateX(-50%);bottom:124px;z-index:2147483646;' +
+        'position:absolute;left:50%;transform:translate(-50%,6px);opacity:0;' +
+        'transition:opacity .25s ease,transform .25s ease;' +
+        'bottom:124px;z-index:2147483646;' +
         'background:' + toastGlass + ';color:#fff;padding:11px 18px;text-align:center;' +
         '-webkit-backdrop-filter:blur(24px) saturate(200%);backdrop-filter:blur(24px) saturate(200%);' +
         'border:1px solid rgba(255,255,255,.16);box-shadow:0 10px 30px rgba(0,0,0,.4);' +
@@ -587,8 +589,22 @@
         'pointer-events:none;max-width:86%;line-height:1.35;';
       if (host === document.body) el.style.position = 'fixed';
       host.appendChild(el);
+      // Same fade as the player's chrome (Kurt): rise + fade in,
+      // fade out before removal instead of vanishing.
+      setTimeout(function () {
+        try {
+          el.style.opacity = '1';
+          el.style.transform = 'translate(-50%,0)';
+        } catch (e) {}
+      }, 30);
       if (CAP.toastTimer) clearTimeout(CAP.toastTimer);
-      CAP.toastTimer = setTimeout(function () { try { el.remove(); } catch (e) {} }, ms || 5000);
+      CAP.toastTimer = setTimeout(function () {
+        try {
+          el.style.opacity = '0';
+          el.style.transform = 'translate(-50%,6px)';
+        } catch (e) {}
+        setTimeout(function () { try { el.remove(); } catch (e) {} }, 280);
+      }, ms || 5000);
     } catch (e) {}
   }
 
@@ -1588,7 +1604,7 @@
         var f = parts[i].split('#');
         // Real board format (yt-dlp's parse, verified Nov 26):
         // width#height#frameCount#cols#rows#intervalMs#nameTemplate#sigh.
-        // v2.15.0 read cols as the interval and the interval as the
+        // v2.16.0 read cols as the interval and the interval as the
         // sigh, so every sheet URL failed and no preview ever loaded.
         if (f.length !== 8) continue;
         var b = {
@@ -3002,6 +3018,9 @@
     if (qdWired) return;
     qdWired = true;
     document.addEventListener('pointerdown', function (e) {
+      // Watchdog: a previous drag that never saw its release must
+      // never leave a row hovering — force-clean before anything.
+      if (qd && qd.active) qdCleanup();
       var t = e && e.target;
       if (!t || typeof t.closest !== 'function') return;
       var item = null;
@@ -3031,7 +3050,11 @@
           try { qd.rowH = qd.item.getBoundingClientRect().height || 0; } catch (err) {}
         }
         qd.dt = makeDataTransfer();
-        fireDrag(qd.item, 'dragstart', e, qd.dt);
+        // NOTE: no dragstart yet. v2.15 fired it at drag begin and
+        // YouTube's own drag state armed for the whole gesture,
+        // then stranded — the row stayed hovering until a tap
+        // finished their lifecycle (Kurt). The whole sequence now
+        // fires in one shot at release (see endDrag).
         try {
           qd.item.classList.add('ytnf-dragging');
           qd.item.style.position = 'relative';
@@ -3061,26 +3084,53 @@
         if (target < qd.index && p < qd.index && p >= target) shift = qd.rowH;
         try { r.style.transform = shift ? 'translateY(' + shift + 'px)' : ''; } catch (err) {}
       });
-      var over = qd.rows[target];
-      if (over && over !== qd.item) fireDrag(over, 'dragover', e, qd.dt);
       try { e.preventDefault(); } catch (err) {}
     }, true);
     function endDrag(e, cancelled) {
       if (!qd) return;
       var wasActive = qd.active;
       var item = qd.item, rows = qd.rows, index = qd.index,
-        target = qd.target, dt = qd.dt;
-      if (wasActive) {
-        if (!cancelled && rows && target !== index && rows[target]) {
-          fireDrag(rows[target], 'dragover', e, dt);
-          fireDrag(rows[target], 'drop', e, dt);
-        }
-        fireDrag(item, 'dragend', e, dt);
+        target = qd.target, dt = qd.dt || makeDataTransfer();
+      if (wasActive && !cancelled && rows && target !== index && rows[target]) {
+        // Single-shot commit: YouTube's reorder handler gets the
+        // complete lifecycle in one synchronous burst at the
+        // release point, so its drag state can never arm early
+        // and strand. If the item wraps an inner draggable
+        // element, that is the source their handler expects.
+        var src = item;
+        try {
+          var inner = item.querySelector && item.querySelector('[draggable="true"]');
+          if (inner) src = inner;
+        } catch (err) {}
+        fireDrag(src, 'dragstart', e, dt);
+        fireDrag(rows[target], 'dragover', e, dt);
+        fireDrag(rows[target], 'drop', e, dt);
+        fireDrag(src, 'dragend', e, dt);
+        // Delayed sweep: whatever state (ours or theirs) is left
+        // on the row shortly after must not linger as a hover.
+        var sweptItem = item, sweptRows = rows;
+        setTimeout(function () {
+          try {
+            sweptRows.forEach(function (r) {
+              try { r.style.transform = ''; r.style.transition = ''; } catch (err) {}
+            });
+            sweptItem.classList.remove('ytnf-dragging');
+            sweptItem.style.transform = '';
+            sweptItem.style.zIndex = '';
+            sweptItem.style.position = '';
+          } catch (err) {}
+        }, 400);
       }
       qdCleanup();
     }
     document.addEventListener('pointerup', function (e) { endDrag(e, false); }, true);
     document.addEventListener('pointercancel', function (e) { endDrag(e, true); }, true);
+    // Belt and braces: a release the document somehow misses
+    // still ends the drag at the window.
+    try {
+      window.addEventListener('pointerup', function (e) { endDrag(e, false); }, true);
+      window.addEventListener('pointercancel', function (e) { endDrag(e, true); }, true);
+    } catch (err) {}
   }
 
   /* ---------------- below-the-player glass (v2.12) ----------------
@@ -3104,6 +3154,21 @@
       ' #header { background: rgba(30,30,34,.94) !important;' +
       ' border-bottom: 1px solid rgba(255,255,255,.07) !important;' +
       ' font-weight: 600; letter-spacing: -.01em; }',
+    // v2.16 (Kurt): with Liquid Glass on, the queue wears the
+    // player's true liquid glass — sheen gradient over the dark
+    // tint + backdrop blur — not the near-solid card. Internals
+    // stay untouched (the v2.12 lesson): only host + header.
+    panelLiquid:
+      ':host { background: linear-gradient(135deg, rgba(255,255,255,.20),' +
+      ' rgba(255,255,255,.05) 45%, rgba(255,255,255,.02)),' +
+      ' linear-gradient(rgba(22,22,27,.44), rgba(22,22,27,.44)) !important;' +
+      ' -webkit-backdrop-filter: blur(24px) saturate(200%) !important;' +
+      ' backdrop-filter: blur(24px) saturate(200%) !important;' +
+      ' border: 1px solid rgba(255,255,255,.16) !important;' +
+      ' border-radius: 16px !important; }' +
+      ' #header { background: transparent !important;' +
+      ' border-bottom: 1px solid rgba(255,255,255,.10) !important;' +
+      ' font-weight: 600; letter-spacing: -.01em; }',
     metadata:
       // v2.15: the host is the grouped card now (inline, below);
       // the description sits inside it as a lighter inset card,
@@ -3112,24 +3177,34 @@
       ' border-radius: 10px !important; }' +
       ' #title h1 { font-weight: 600; letter-spacing: -.01em; }',
   };
-  function injectShadowGlass(host, cssText) {
+  function injectShadowGlass(host, cssText, key) {
     if (!host) return false;
     var root = null;
     try { root = host.shadowRoot; } catch (err) {}
     if (!root || typeof root.appendChild !== 'function') return false;
+    var existing = null;
     try {
-      if (typeof root.querySelector === 'function' &&
-          root.querySelector('style[data-ytnf-glass]')) return true;
-    } catch (err) {}
-    if (root.children) {
-      for (var i = 0; i < root.children.length; i++) {
-        if (root.children[i] && root.children[i].__ytnfGlass) return true;
+      if (typeof root.querySelector === 'function') {
+        existing = root.querySelector('style[data-ytnf-glass]');
       }
+    } catch (err) {}
+    if (!existing && root.children) {
+      for (var i = 0; i < root.children.length; i++) {
+        if (root.children[i] && root.children[i].__ytnfGlass) { existing = root.children[i]; break; }
+      }
+    }
+    if (existing) {
+      // Variant switch (classic <-> liquid): refresh in place.
+      if (key && existing.__ytnfKey !== key) {
+        try { existing.textContent = cssText; existing.__ytnfKey = key; } catch (err) {}
+      }
+      return true;
     }
     try {
       var st = document.createElement('style');
       try { st.setAttribute('data-ytnf-glass', '1'); } catch (err) {}
       st.__ytnfGlass = true;
+      st.__ytnfKey = key || '';
       st.textContent = cssText;
       root.appendChild(st);
       return true;
@@ -3139,14 +3214,27 @@
     try {
       var panel = document.querySelector('ytd-playlist-panel-renderer');
       if (panel) {
-        try {
-          panel.style.background = 'rgba(30,30,34,.94)';
-          panel.style.backdropFilter = '';
-          panel.style.webkitBackdropFilter = '';
-          panel.style.border = '1px solid rgba(255,255,255,.10)';
-          panel.style.borderRadius = '12px';
-        } catch (err) {}
-        injectShadowGlass(panel, BELOW_GLASS.panel);
+        if (PREFS.liquidGlass) {
+          try {
+            panel.style.background =
+              'linear-gradient(135deg,rgba(255,255,255,.20),rgba(255,255,255,.05) 45%,rgba(255,255,255,.02)),' +
+              'linear-gradient(rgba(22,22,27,.44),rgba(22,22,27,.44))';
+            panel.style.backdropFilter = 'blur(24px) saturate(200%)';
+            panel.style.webkitBackdropFilter = 'blur(24px) saturate(200%)';
+            panel.style.border = '1px solid rgba(255,255,255,.16)';
+            panel.style.borderRadius = '16px';
+          } catch (err) {}
+          injectShadowGlass(panel, BELOW_GLASS.panelLiquid, 'liquid');
+        } else {
+          try {
+            panel.style.background = 'rgba(30,30,34,.94)';
+            panel.style.backdropFilter = '';
+            panel.style.webkitBackdropFilter = '';
+            panel.style.border = '1px solid rgba(255,255,255,.10)';
+            panel.style.borderRadius = '12px';
+          } catch (err) {}
+          injectShadowGlass(panel, BELOW_GLASS.panel, 'classic');
+        }
       }
       var meta = document.querySelector('ytd-watch-metadata');
       if (meta) {

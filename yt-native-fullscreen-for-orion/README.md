@@ -84,7 +84,14 @@ Firefox Manifest V2 extension for Orion on iPhone/iPad.
    refraction is native-only); off = the classic frosted glass.
    The AirPlay button calls WebKit's playback-target picker
    where available.
-8. **Native-iPad pass** (v2.15) — the toast moved up clear of
+8. **Drag + glass fixes** (v2.16) — the queue drag no longer
+   strands a row hovering: YouTube's reorder now gets the full
+   drag lifecycle in one shot at release, cleanup is
+   unconditional (plus a watchdog and a delayed sweep), the
+   Queue panel wears the player's true Liquid Glass when the
+   toggle is on, the per-item ⋮ menus are glass too, and the
+   toast fades in/out like the player's chrome.
+9. **Native-iPad pass** (v2.15) — the toast moved up clear of
    the scrub bar (centred, padded, Liquid Glass); the Settings
    Queue page is GONE (YouTube's own Queue panel below the
    player is the queue now — its rows are encapsulated cards
@@ -193,7 +200,7 @@ Notes / trade-offs:
 
 ## Install in Orion (iPhone / iPad)
 
-1. Download `yt-native-fullscreen-orion-2.15.0.zip` to your iPhone
+1. Download `yt-native-fullscreen-orion-2.16.0.zip` to your iPhone
    (Files → Downloads). **Don't unzip it.** The `.xpi` is the same
    package. If you installed v1.0/v1.1, remove that version first.
 2. Orion: **Settings → Extensions** → turn **Firefox extensions** on.
@@ -206,7 +213,7 @@ Notes / trade-offs:
    **Settings → Accessibility → Subtitles & Captioning →
    Closed Captions + SDH** is on.
 
-## On-device checks for v2.15.0
+## On-device checks for v2.16.0
 
 1. Open a video and tap it: the centre cluster appears (↺10,
    play/pause, 10↻) plus the glass bottom bar. Tap again to
@@ -248,7 +255,11 @@ Notes / trade-offs:
     video the centre pause button, ±10s skips and scrubber must
     all work immediately, the times must belong to the new video,
     and pausing must keep the UI up.
-11. **v2.15 checks**: toasts float above the scrub bar, never
+11. **v2.16 checks**: drag a queue row — it should land and
+    STAY (no hovering, no tap needed); with Liquid Glass on,
+    the Queue box should look like the player's glass; open a
+    queue row's ⋮ menu — glass; toasts fade in and out.
+12. **v2.15 checks**: toasts float above the scrub bar, never
     touching it; Settings has no Queue row (Autoplay sits on
     the main page); in YouTube's Queue box, press a row's grip
     and drag — the row should ride your finger and the order

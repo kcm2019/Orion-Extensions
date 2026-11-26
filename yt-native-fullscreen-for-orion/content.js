@@ -1,5 +1,5 @@
 'use strict';
-/* YT Native Fullscreen for Orion v2.12.0 (Firefox MV2)
+/* YT Native Fullscreen for Orion v2.13.0 (Firefox MV2)
  *
  * v1.0: fullscreen a YouTube video -> iOS native player, via
  *   video.webkitEnterFullscreen() called synchronously in the tap.
@@ -775,7 +775,8 @@
     shownAt: 0, lastActivity: 0, compact: false, mode: 'classic',
     topBar: null, topPillL: null, topPillR: null, volPill: null,
     volTrack: null, volFill: null, volKnob: null, volBtn: null,
-    airplayBtn: null, gearPill: null, scrubTrack: null, scrubBubble: null,
+    airplayBtn: null, airplayWireless: false,
+    gearPill: null, scrubTrack: null, scrubBubble: null,
     volScrubbing: false, lastPlayingAt: 0, resumeGuardUntil: 0,
   };
 
@@ -1194,6 +1195,23 @@
     });
     v.addEventListener('webkitendfullscreen', function () { onPresentationExit(v); });
     v.addEventListener('ended', function () { updateTransport(); showUI(); });
+    // AirPlay active state (v2.13): WebKit reports wireless
+    // playback on the element; the native player turns its
+    // AirPlay glyph blue and glowing while it's live — so do we.
+    v.addEventListener('webkitcurrentplaybacktargetiswirelesschanged', function () {
+      updateAirPlayUI(v);
+    });
+    updateAirPlayUI(v);
+  }
+
+  function updateAirPlayUI(v) {
+    var btn = AUI.airplayBtn;
+    if (!btn) return;
+    var wireless = false;
+    try { wireless = !!(v && v.webkitCurrentPlaybackTargetIsWireless); } catch (err) {}
+    if (wireless === AUI.airplayWireless) return;
+    AUI.airplayWireless = wireless;
+    try { btn.innerHTML = airplaySVG(wireless); } catch (err) {}
   }
 
   function adoptVideo(v) {
@@ -1858,6 +1876,16 @@
     }
   }
 
+  function airplaySVG(active) {
+    var c = active ? '#0A84FF' : '#fff';
+    var glow = active
+      ? ' style="filter:drop-shadow(0 0 5px rgba(10,132,255,.95)) drop-shadow(0 0 12px rgba(10,132,255,.45));"'
+      : '';
+    return '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="' + c + '" ' +
+      'stroke-width="1.8" aria-hidden="true"' + glow + '>' +
+      '<rect x="3" y="4.5" width="18" height="12" rx="2.5"/>' +
+      '<path d="M8 20.6 12 15.8l4 4.8z" fill="' + c + '" stroke="none"/></svg>';
+  }
   function speakerSVG(level) {
     var waves = '';
     if (level > 0) {
@@ -2195,11 +2223,7 @@
         return p;
       }
       var airplayBtn = circleBtn(44, 0, '');
-      airplayBtn.innerHTML =
-        '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" ' +
-        'stroke-width="1.8" aria-hidden="true">' +
-        '<rect x="3" y="4.5" width="18" height="12" rx="2.5"/>' +
-        '<path d="M8 20.6 12 15.8l4 4.8z" fill="#fff" stroke="none"/></svg>';
+      airplayBtn.innerHTML = airplaySVG(!!AUI.airplayWireless);
       airplayBtn.dataset.act = 'airplay';
       airplayBtn.title = 'AirPlay';
       airplayBtn.addEventListener('click', function (e) {

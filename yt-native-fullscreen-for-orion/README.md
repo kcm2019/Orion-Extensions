@@ -84,7 +84,12 @@ Firefox Manifest V2 extension for Orion on iPhone/iPad.
    refraction is native-only); off = the classic frosted glass.
    The AirPlay button calls WebKit's playback-target picker
    where available.
-8. **Below-the-player glass, applied from inside** (v2.12) —
+8. **AirPlay active glow** (v2.13) — while playback is
+   wireless, the AirPlay glyph turns system blue (#0A84FF)
+   with a soft halo, matching the native iOS player; it
+   returns to white when AirPlay disconnects. Driven by
+   WebKit's own wireless-playback state on the video element.
+9. **Below-the-player glass, applied from inside** (v2.12) —
    v2.11 styled the description and Queue box from the
    stylesheet, but the description lives inside
    ytd-watch-metadata's shadow DOM, which page CSS cannot
@@ -166,7 +171,7 @@ Notes / trade-offs:
 
 ## Install in Orion (iPhone / iPad)
 
-1. Download `yt-native-fullscreen-orion-2.12.0.zip` to your iPhone
+1. Download `yt-native-fullscreen-orion-2.13.0.zip` to your iPhone
    (Files → Downloads). **Don't unzip it.** The `.xpi` is the same
    package. If you installed v1.0/v1.1, remove that version first.
 2. Orion: **Settings → Extensions** → turn **Firefox extensions** on.
@@ -179,7 +184,7 @@ Notes / trade-offs:
    **Settings → Accessibility → Subtitles & Captioning →
    Closed Captions + SDH** is on.
 
-## On-device checks for v2.12.0
+## On-device checks for v2.13.0
 
 1. Open a video and tap it: the centre cluster appears (↺10,
    play/pause, 10↻) plus the glass bottom bar. Tap again to
@@ -221,7 +226,11 @@ Notes / trade-offs:
     video the centre pause button, ±10s skips and scrubber must
     all work immediately, the times must belong to the new video,
     and pausing must keep the UI up.
-11. **Below the player (v2.12)**: the description box and the
+11. **AirPlay glow (v2.13)**: start AirPlay from our button,
+    then reopen the controls — the AirPlay glyph should be
+    blue and glowing while you're connected, and white again
+    after you disconnect.
+12. **Below the player (v2.12)**: the description box and the
     Queue box should now actually wear the glass — translucent,
     blurred, hairline border. Expand the description and
     collapse/reopen the queue to confirm it survives both.

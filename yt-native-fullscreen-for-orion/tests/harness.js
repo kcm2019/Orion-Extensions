@@ -594,7 +594,7 @@ const okFetch = (env) => (u) => {
     }
     const mf = JSON.parse(fs.readFileSync(__dirname + '/../manifest.json', 'utf8'));
     assert.ok(mf.content_scripts[0].css.includes('player.css'), 'manifest loads player.css');
-    assert.strictEqual(mf.version, '2.12.0');
+    assert.strictEqual(mf.version, '2.13.0');
     console.log('PASS 16 reskin is paint-only, no YouTube control hidden or removed');
   }
 
@@ -1510,5 +1510,29 @@ const okFetch = (env) => (u) => {
     console.log('PASS 49 below-player glass injected into shadow roots');
   }
 
-  console.log('ALL 49 TESTS PASS');
+  // 50. AirPlay active glow (v2.13): while playback is wireless,
+  // the AirPlay glyph turns system blue with a halo, like the
+  // native iOS player; it returns to white when wireless ends.
+  {
+    const video = makeVideo();
+    const env = makeEnv({ video, playerResponse: captionPR([ytTrack('en', '', 'English')]) });
+    env.sandbox.fetch = okFetch(env);
+    vm.runInContext(src, env.sandbox);
+    await flush();
+    const AUI = env.sandbox.window.__ytnfAUI;
+    const fire = (type) => (video.listeners[type] || []).forEach((fn) => fn());
+    assert.ok(AUI.airplayBtn, 'airplay button exists');
+    assert.ok(!AUI.airplayBtn.innerHTML.includes('#0A84FF'), 'glyph starts white');
+    video.webkitCurrentPlaybackTargetIsWireless = true;
+    fire('webkitcurrentplaybacktargetiswirelesschanged');
+    assert.ok(AUI.airplayBtn.innerHTML.includes('#0A84FF'), 'glyph turns blue while wireless');
+    assert.ok(AUI.airplayBtn.innerHTML.includes('drop-shadow'), 'glyph glows while wireless');
+    video.webkitCurrentPlaybackTargetIsWireless = false;
+    fire('webkitcurrentplaybacktargetiswirelesschanged');
+    assert.ok(!AUI.airplayBtn.innerHTML.includes('#0A84FF'), 'glyph returns to white');
+    assert.ok(!AUI.airplayBtn.innerHTML.includes('drop-shadow'), 'glow clears');
+    console.log('PASS 50 AirPlay glyph glows blue while wireless');
+  }
+
+  console.log('ALL 50 TESTS PASS');
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });

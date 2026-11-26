@@ -1,5 +1,5 @@
 'use strict';
-/* YT Native Fullscreen for Orion v2.14.0 (Firefox MV2)
+/* YT Native Fullscreen for Orion v2.14.1 (Firefox MV2)
  *
  * v1.0: fullscreen a YouTube video -> iOS native player, via
  *   video.webkitEnterFullscreen() called synchronously in the tap.
@@ -54,7 +54,7 @@
     large: '480p', medium: '360p', small: '240p', tiny: '144p',
   };
 
-  var VERSION = '2.14.0';
+  var VERSION = '2.14.1';
   var LOGBUF = [];
   function log() {
     var msg = '';
@@ -1583,6 +1583,13 @@
         if (holdState !== st) return;
         st.active = true;
         AUI.holdSpeed = true;
+        // Hide YouTube's own 2x indicator (its speedmaster overlay
+        // and bezel text react to the rate change / the hold) —
+        // our chip is the only indicator (Kurt, Nov 26).
+        try {
+          var pl = findPlayer();
+          if (pl && pl.classList) pl.classList.add('ytnf-hold2x');
+        } catch (err) {}
         try { v.playbackRate = 2; } catch (err) {}
         if (AUI.holdChip) AUI.holdChip.style.display = 'block';
         log('hold-to-2x engaged');
@@ -1604,6 +1611,10 @@
       if (!wasActive) return;
       AUI.holdSpeed = false;
       AUI.swallowNextClick = true;
+      try {
+        var pl2 = findPlayer();
+        if (pl2 && pl2.classList) pl2.classList.remove('ytnf-hold2x');
+      } catch (err) {}
       enforceSpeed();
       if (AUI.holdChip) AUI.holdChip.style.display = 'none';
       log('hold-to-2x released');
@@ -1649,19 +1660,27 @@
       var best = null;
       for (var i = 1; i < parts.length; i++) {
         var f = parts[i].split('#');
-        if (f.length < 6) continue;
-        var b = { w: +f[0], h: +f[1], count: +f[2], interval: +f[3], sigh: f[5], level: i - 1 };
-        if (!b.w || !b.h || !b.count || !b.interval) continue;
+        // Real board format (yt-dlp's parse, verified Nov 26):
+        // width#height#frameCount#cols#rows#intervalMs#nameTemplate#sigh.
+        // v2.14.1 read cols as the interval and the interval as the
+        // sigh, so every sheet URL failed and no preview ever loaded.
+        if (f.length !== 8) continue;
+        var b = {
+          w: +f[0], h: +f[1], count: +f[2], cols: +f[3], rows: +f[4],
+          interval: +f[5], name: f[6], sigh: f[7], level: i - 1,
+        };
+        if (!b.w || !b.h || !b.count || !b.cols || !b.rows ||
+            !b.interval || !b.name || !b.sigh) continue;
         if (!best) best = b;
         else if (best.h > 90 && b.h < best.h) best = b;
         else if (b.h <= 90 && b.h > best.h) best = b;
       }
       if (!best) return;
       best.base = base;
-      best.cols = 5;
-      best.perSheet = 25;
+      best.perSheet = best.cols * best.rows;
       MEDIA.board = best;
-      log('storyboard:', best.w + 'x' + best.h, 'every', best.interval + 'ms');
+      log('storyboard:', best.w + 'x' + best.h, 'every', best.interval + 'ms,',
+        best.cols + 'x' + best.rows, 'grid');
     } catch (e) {}
   }
   function boardThumbAt(t) {
@@ -1673,13 +1692,14 @@
     var page = Math.floor(idx / b.perSheet);
     var pos = idx % b.perSheet;
     return {
-      url: b.base.replace('$L', String(b.level)).replace('$N', 'M' + page) +
+      url: b.base.replace('$L', String(b.level))
+          .replace('$N', b.name.replace('$M', String(page))) +
         (b.base.indexOf('?') >= 0 ? '&' : '?') + 'sigh=' + b.sigh,
       x: (pos % b.cols) * b.w,
       y: Math.floor(pos / b.cols) * b.h,
       w: b.w, h: b.h,
       sheetW: b.cols * b.w,
-      sheetH: Math.ceil(b.perSheet / b.cols) * b.h,
+      sheetH: b.rows * b.h,
     };
   }
   function renderChapterTicks() {
@@ -3057,6 +3077,9 @@
         '#movie_player.ytnf-on .ytp-gradient-bottom,' +
         '#movie_player.ytnf-on .ytp-gradient-top,' +
         '#movie_player.ytnf-on .ytp-large-play-button{display:none!important}' +
+        '#movie_player.ytnf-hold2x .ytp-speedmaster-overlay,' +
+        '#movie_player.ytnf-hold2x .ytp-bezel-text-wrapper,' +
+        '#movie_player.ytnf-hold2x .ytp-bezel-text{display:none!important}' +
         '@keyframes ytnfRowIn{from{opacity:0;transform:translateY(5px)}' +
         'to{opacity:1;transform:translateY(0)}}';
       (document.head || document.documentElement).appendChild(st);

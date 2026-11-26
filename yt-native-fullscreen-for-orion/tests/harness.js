@@ -598,7 +598,7 @@ const okFetch = (env) => (u) => {
     }
     const mf = JSON.parse(fs.readFileSync(__dirname + '/../manifest.json', 'utf8'));
     assert.ok(mf.content_scripts[0].css.includes('player.css'), 'manifest loads player.css');
-    assert.strictEqual(mf.version, '2.14.0');
+    assert.strictEqual(mf.version, '2.14.1');
     console.log('PASS 16 reskin is paint-only, no YouTube control hidden or removed');
   }
 
@@ -1699,7 +1699,7 @@ const okFetch = (env) => (u) => {
       '0:00 Intro\n2:30 Setup\n5:00 Deep Dive\nSome links below';
     pr.storyboards = {
       playerStoryboardSpecRenderer: {
-        spec: 'https://i.ytimg.com/sb/chap1/storyboard3_L$L/$N.jpg|160#90#40#10000#0#sighX',
+        spec: 'https://i.ytimg.com/sb/chap1/storyboard3_L$L/$N.jpg|160#90#40#5#5#10000#M$M#sighX',
       },
     };
     const env = makeEnv({ video, playerResponse: pr });
@@ -1763,7 +1763,7 @@ const okFetch = (env) => (u) => {
     vm.runInContext(src, env.sandbox);
     await flush();
     const d = env.sandbox.window.__ytnfDiag();
-    assert.ok(d.includes('Version: 2.14.0'), 'diag version');
+    assert.ok(d.includes('Version: 2.14.1'), 'diag version');
     assert.ok(d.includes('Prefs:'), 'diag prefs');
     assert.ok(d.includes('--- log ---'), 'diag log section');
     const root = env.player.children.find((c) => c.id === 'ytnf-apple');
@@ -1796,5 +1796,35 @@ const okFetch = (env) => (u) => {
     console.log('PASS 58 below-player rebuild values + manifest');
   }
 
-  console.log('ALL 58 TESTS PASS');
+  // 59. Hold-to-2x hides YouTube's own 2x indicator (v2.14.1, Kurt):
+  // the player carries ytnf-hold2x only while our hold is engaged,
+  // and the injected chrome style kills the speedmaster overlay +
+  // bezel text under that class.
+  {
+    const video = makeVideo();
+    const env = makeEnv({ video, playerResponse: captionPR([ytTrack('en', '', 'English')]) });
+    env.sandbox.fetch = okFetch(env);
+    vm.runInContext(src, env.sandbox);
+    await flush();
+    video.paused = false;
+    // The harness stub doesn't retain the injected <style> in
+    // head children, so the rule itself is asserted on the source;
+    // the class toggling below is the behavioural half.
+    assert.ok(src.includes('ytp-speedmaster-overlay'), 'speedmaster rule present');
+    assert.ok(src.includes('#movie_player.ytnf-hold2x'), 'hold-scoped rule present');
+    assert.strictEqual(env.player.classList.contains('ytnf-hold2x'), false, 'no hold class at rest');
+    const videoTap = { closest: (sel) => (sel.includes('#movie_player') ? {} : null) };
+    const fireDoc = (type, ev) => (env.listeners[type] || []).forEach((fn) => fn(ev));
+    const evBase = { stopPropagation() {}, preventDefault() {} };
+    fireDoc('pointerdown', Object.assign({ target: videoTap, clientX: 100, clientY: 100 }, evBase));
+    await new Promise((r) => setTimeout(r, 500));
+    assert.strictEqual(video.playbackRate, 2, 'hold engaged');
+    assert.strictEqual(env.player.classList.contains('ytnf-hold2x'), true, 'hold class hides YouTube indicator');
+    fireDoc('pointerup', Object.assign({ target: videoTap, clientX: 100, clientY: 100 }, evBase));
+    await flush();
+    assert.strictEqual(env.player.classList.contains('ytnf-hold2x'), false, 'hold class removed on release');
+    console.log('PASS 59 hold hides YouTube 2x indicator');
+  }
+
+  console.log('ALL 59 TESTS PASS');
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });

@@ -184,7 +184,7 @@ Notes / trade-offs:
 
 ## Install in Orion (iPhone / iPad)
 
-1. Download `yt-native-fullscreen-orion-2.14.0.zip` to your iPhone
+1. Download `yt-native-fullscreen-orion-2.14.1.zip` to your iPhone
    (Files → Downloads). **Don't unzip it.** The `.xpi` is the same
    package. If you installed v1.0/v1.1, remove that version first.
 2. Orion: **Settings → Extensions** → turn **Firefox extensions** on.
@@ -239,7 +239,12 @@ Notes / trade-offs:
     video the centre pause button, ±10s skips and scrubber must
     all work immediately, the times must belong to the new video,
     and pausing must keep the UI up.
-11. **v2.14 round**: description + Queue box should read as
+11. **v2.14.1 fixes**: during hold-to-2x, YouTube's own 2x
+    indicator should NOT appear (only our chip); scrubbing a
+    video should show a real preview thumbnail in the bubble
+    (v2.14.0's storyboard parse used the wrong field layout,
+    so the sheet URL was invalid and nothing loaded).
+12. **v2.14 round**: description + Queue box should read as
     clean dark cards (no blur, no bleed-through); set a 5-min
     sleep timer and confirm playback pauses; on a video with a
     sponsor segment, confirm it skips with a toast; hold your

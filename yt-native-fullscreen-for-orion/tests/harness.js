@@ -598,7 +598,7 @@ const okFetch = (env) => (u) => {
     }
     const mf = JSON.parse(fs.readFileSync(__dirname + '/../manifest.json', 'utf8'));
     assert.ok(mf.content_scripts[0].css.includes('player.css'), 'manifest loads player.css');
-    assert.strictEqual(mf.version, '2.14.1');
+    assert.strictEqual(mf.version, '2.15.0');
     console.log('PASS 16 reskin is paint-only, no YouTube control hidden or removed');
   }
 
@@ -806,52 +806,53 @@ const okFetch = (env) => (u) => {
     console.log('PASS 27 miniplayer compact layout');
   }
 
-  // 28. Queue rule: at video end, the queue plays first (and the
-  // played item is consumed + persisted).
+  // 28. Video end (v2.15): our custom queue is gone — with
+  // autoplay ON we never navigate (YouTube's own queue / Up Next
+  // proceeds); with autoplay OFF playback stops at the end.
   {
     const video = makeVideo();
     const env = makeEnv({
       video,
       playerResponse: captionPR([ytTrack('en', '', 'English')]),
-      initialPrefs: { quality: 'auto', speed: 1, captionLang: null, queue: [{ id: 'next1', title: 'Next One' }], autoplayNext: true },
+      initialPrefs: { autoplayNext: true },
     });
     env.sandbox.fetch = okFetch(env);
     vm.runInContext(src, env.sandbox);
     await flush();
+    const before = env.sandbox.location.href;
     (video.listeners.ended || []).forEach((fn) => fn());
-    assert.strictEqual(env.sandbox.location.href, 'https://www.youtube.com/watch?v=next1',
-      'advanced to the queued video: ' + env.sandbox.location.href);
-    const saved = env.storageSetCalls.map((c) => c.ytnf_prefs).filter(Boolean).pop();
-    assert.ok(saved && Array.isArray(saved.queue) && saved.queue.length === 0, 'queue consumed + persisted');
-    console.log('PASS 28 queue plays first at video end');
+    assert.strictEqual(env.sandbox.location.href, before, 'no self-navigation at end (autoplay on)');
+    const video2 = makeVideo();
+    video2.paused = false;
+    const env2 = makeEnv({
+      video: video2,
+      playerResponse: captionPR([ytTrack('en', '', 'English')]),
+      initialPrefs: { autoplayNext: false },
+    });
+    env2.sandbox.fetch = okFetch(env2);
+    vm.runInContext(src, env2.sandbox);
+    await flush();
+    (video2.listeners.ended || []).forEach((fn) => fn());
+    assert.strictEqual(video2.paused, true, 'autoplay off stops at the end');
+    console.log('PASS 28 video end: YouTube handles next; autoplay off stops');
   }
 
-  // 29. Queue page: Up Next entries can be added; the autoplay
-  // toggle flips the stored pref (and gates Up Next only).
+  // 29. Settings (v2.15): no Queue page anymore; the Autoplay
+  // Up Next toggle lives on the main page and persists.
   {
     const video = makeVideo();
     const env = makeEnv({ video, playerResponse: captionPR([ytTrack('en', '', 'English')]) });
     env.sandbox.fetch = okFetch(env);
     vm.runInContext(src, env.sandbox);
     await flush();
-    const fakeAnchor = {
-      getAttribute: (k) => (k === 'href' ? '/watch?v=up42abcd&list=WL' : (k === 'title' ? 'Up Next Vid' : null)),
-      closest: () => null,
-    };
-    env.sandbox.document.querySelectorAll = (sel) =>
-      (String(sel).includes('ytd-compact-video-renderer') ? [fakeAnchor] : []);
     const root = env.player.children.find((c) => c.id === 'ytnf-apple');
     findAll(root, (c) => c.dataset && c.dataset.act === 'menu')[0].click();
-    findAll(root, (c) => c.dataset && c.dataset.page === 'queue')[0].click();
-    const add = findAll(root, (c) => c.dataset && c.dataset.qadd === 'up42abcd')[0];
-    assert.ok(add, 'Up Next entry offered on the Queue page');
-    add.click();
-    let saved = env.storageSetCalls.map((c) => c.ytnf_prefs).filter(Boolean).pop();
-    assert.ok(saved.queue.some((q) => q.id === 'up42abcd'), 'video added to the stored queue');
+    assert.strictEqual(findAll(root, (c) => c.dataset && c.dataset.page === 'queue').length, 0,
+      'no Queue row in Settings');
     findAll(root, (c) => c.dataset && c.dataset.pick === 'autoplay')[0].click();
-    saved = env.storageSetCalls.map((c) => c.ytnf_prefs).filter(Boolean).pop();
-    assert.strictEqual(saved.autoplayNext, false, 'autoplay toggle persisted off');
-    console.log('PASS 29 queue page: add from Up Next + autoplay toggle');
+    const saved = env.storageSetCalls.map((c) => c.ytnf_prefs).filter(Boolean).pop();
+    assert.strictEqual(saved.autoplayNext, false, 'autoplay toggle persisted off from the main page');
+    console.log('PASS 29 settings: queue page removed, autoplay on main page');
   }
 
   // 30. Auto-PiP on scroll: fires once when the player drops below
@@ -1150,46 +1151,7 @@ const okFetch = (env) => (u) => {
     console.log('PASS 39 panel: pill hides, outside tap dismisses, gestures shielded');
   }
 
-  // 40. Queue scrape (v2.9): the queue panel renderers and the
-  // lockup view-model cards are sources too, not just the classic
-  // compact renderers.
-  {
-    const video = makeVideo();
-    const env = makeEnv({ video, playerResponse: captionPR([ytTrack('en', '', 'English')]) });
-    env.sandbox.fetch = okFetch(env);
-    vm.runInContext(src, env.sandbox);
-    await flush();
-    const panelAnchor = {
-      getAttribute: (k) => (k === 'href' ? '/watch?v=queue99x' : null),
-      closest: (sel) => (String(sel).includes('ytd-playlist-panel-video-renderer')
-        ? { querySelector: () => ({ getAttribute: () => 'Queued Panel Vid', textContent: 'Queued Panel Vid' }) }
-        : null),
-      textContent: '',
-    };
-    const lockupAnchor = {
-      getAttribute: (k) => (k === 'href' ? '/watch?v=lock88y' : (k === 'title' ? 'Lockup Vid' : null)),
-      closest: () => null,
-      textContent: '',
-    };
-    env.sandbox.document.querySelectorAll = (sel) => {
-      const q = String(sel);
-      if (q.includes('ytd-playlist-panel-video-renderer') && q.includes('a[href')) return [panelAnchor];
-      if (q.includes('yt-lockup-view-model')) return [lockupAnchor];
-      return [];
-    };
-    const root = env.player.children.find((c) => c.id === 'ytnf-apple');
-    findAll(root, (c) => c.dataset && c.dataset.act === 'menu')[0].click();
-    findAll(root, (c) => c.dataset && c.dataset.page === 'queue')[0].click();
-    const addPanel = findAll(root, (c) => c.dataset && c.dataset.qadd === 'queue99x')[0];
-    const addLockup = findAll(root, (c) => c.dataset && c.dataset.qadd === 'lock88y')[0];
-    assert.ok(addPanel, 'queue-panel video offered on the Queue page');
-    assert.ok(addLockup, 'lockup-card video offered on the Queue page');
-    addPanel.click();
-    const saved = env.storageSetCalls.map((c) => c.ytnf_prefs).filter(Boolean).pop();
-    assert.ok(saved.queue.some((q) => q.id === 'queue99x' && q.title === 'Queued Panel Vid'),
-      'queue-panel video added with its real title');
-    console.log('PASS 40 queue scrape: playlist-panel + lockup sources');
-  }
+
 
   // 41. Resume-after-exit (v2.9): closing PiP or exiting native
   // fullscreen resumes a video that was playing; the toggle
@@ -1402,33 +1364,7 @@ const okFetch = (env) => (u) => {
     console.log('PASS 45 centre tap toggles play/pause while the UI is hidden');
   }
 
-  // 46. Our queue reorders by touch (v2.11): up/down buttons on
-  // each queued row swap entries and persist.
-  {
-    const video = makeVideo();
-    const env = makeEnv({
-      video,
-      playerResponse: captionPR([ytTrack('en', '', 'English')]),
-      initialPrefs: {
-        quality: 'auto', speed: 1, captionLang: null,
-        queue: [{ id: 'qa', title: 'A' }, { id: 'qb', title: 'B' }, { id: 'qc', title: 'C' }],
-        autoplayNext: true,
-      },
-    });
-    env.sandbox.fetch = okFetch(env);
-    vm.runInContext(src, env.sandbox);
-    await flush();
-    const root = env.player.children.find((c) => c.id === 'ytnf-apple');
-    findAll(root, (c) => c.dataset && c.dataset.act === 'menu')[0].click();
-    findAll(root, (c) => c.dataset && c.dataset.page === 'queue')[0].click();
-    findAll(root, (c) => c.dataset && c.dataset.qdown === 'qa')[0].click();
-    let saved = env.storageSetCalls.map((c) => c.ytnf_prefs).filter(Boolean).pop();
-    assert.deepStrictEqual(saved.queue.map((q) => q.id), ['qb', 'qa', 'qc'], 'A moved down past B');
-    findAll(root, (c) => c.dataset && c.dataset.qup === 'qa')[0].click();
-    saved = env.storageSetCalls.map((c) => c.ytnf_prefs).filter(Boolean).pop();
-    assert.deepStrictEqual(saved.queue.map((q) => q.id), ['qa', 'qb', 'qc'], 'A moved back up');
-    console.log('PASS 46 our queue: touch up/down reordering');
-  }
+
 
   // 47. Below-the-player glass (v2.11): player.css covers the
   // Queue box + description and still obeys the paint-only rule.
@@ -1443,8 +1379,9 @@ const okFetch = (env) => (u) => {
     console.log('PASS 47 player.css: description + queue glass, paint-only intact');
   }
 
-  // 48. Queue panel touch drag (v2.11): a handle-zone touch drag
-  // is translated into the drag events YouTube's reorder uses.
+  // 48. Queue panel touch drag (v2.15): the row lifts and rides
+  // the finger, siblings shift out of the way, and on release
+  // YouTube's reorder gets the synthetic drop at the target row.
   {
     const video = makeVideo();
     const env = makeEnv({ video, playerResponse: captionPR([ytTrack('en', '', 'English')]) });
@@ -1452,25 +1389,40 @@ const okFetch = (env) => (u) => {
     vm.runInContext(src, env.sandbox);
     await flush();
     env.sandbox.Event = class { constructor(type, opts) { this.type = type; Object.assign(this, opts || {}); } };
-    const mkItem = () => ({
-      _evs: [],
-      dispatchEvent(ev) { this._evs.push(ev.type); return true; },
-      closest(sel) { return String(sel).includes('ytd-playlist-panel-video-renderer') ? this : null; },
-      getBoundingClientRect: () => ({ left: 0, top: 0, width: 300, height: 60 }),
-    });
-    const itemA = mkItem();
-    const itemB = mkItem();
-    env.sandbox.document.elementFromPoint = () => itemB;
+    const container = { children: [] };
+    const mkItem = (idx) => {
+      const el = {
+        tagName: 'YTD-PLAYLIST-PANEL-VIDEO-RENDERER',
+        _evs: [], _classes: new Set(), style: {}, parentNode: container,
+        dispatchEvent(ev) { this._evs.push(ev.type); return true; },
+        closest(sel) { return String(sel).includes('ytd-playlist-panel-video-renderer') ? this : null; },
+        getBoundingClientRect: () => ({ left: 0, top: idx * 60, width: 300, height: 60 }),
+      };
+      el.classList = {
+        add: (c) => el._classes.add(c),
+        remove: (c) => el._classes.delete(c),
+        contains: (c) => el._classes.has(c),
+      };
+      container.children.push(el);
+      return el;
+    };
+    const itemA = mkItem(0);
+    const itemB = mkItem(1);
+    mkItem(2);
     const fire = (type, ev) => (env.listeners[type] || []).forEach((fn) => fn(ev));
     const base = { stopPropagation() {}, preventDefault() {} };
     fire('pointerdown', Object.assign({ target: itemA, clientX: 10, clientY: 10 }, base));
-    fire('pointermove', Object.assign({ target: itemA, clientX: 12, clientY: 32 }, base));
+    fire('pointermove', Object.assign({ target: itemA, clientX: 10, clientY: 75 }, base));
     assert.ok(itemA._evs.includes('dragstart'), 'dragstart fired on the dragged item');
-    assert.ok(itemB._evs.includes('dragover'), 'dragover fired on the item under the finger');
-    fire('pointerup', Object.assign({ target: itemB, clientX: 12, clientY: 32 }, base));
-    assert.ok(itemB._evs.includes('drop'), 'drop fired on the target item');
+    assert.strictEqual(itemA.style.transform, 'translateY(65px)', 'row rides the finger');
+    assert.ok(itemA._classes.has('ytnf-dragging'), 'dragged row lifted (class)');
+    assert.strictEqual(itemB.style.transform, 'translateY(-60px)', 'sibling shifts out of the way');
+    fire('pointerup', Object.assign({ target: itemA, clientX: 10, clientY: 75 }, base));
+    assert.ok(itemB._evs.includes('drop'), 'drop fired on the target row');
     assert.ok(itemA._evs.includes('dragend'), 'dragend fired on the dragged item');
-    console.log('PASS 48 queue panel: touch drag translated to drag events');
+    assert.strictEqual(itemA.style.transform, '', 'transforms cleaned up');
+    assert.ok(!itemA._classes.has('ytnf-dragging'), 'lift class removed');
+    console.log('PASS 48 queue panel: visual touch drag + synthetic drop');
   }
 
   // 49. Below-player glass (v2.12): the description lives inside
@@ -1592,15 +1544,13 @@ const okFetch = (env) => (u) => {
     const env3 = makeEnv({
       video: video3,
       playerResponse: captionPR([ytTrack('en', '', 'English')]),
-      initialPrefs: { sleepMinutes: -1, queue: [{ id: 'later1', title: 'Later' }] },
+      initialPrefs: { sleepMinutes: -1 },
     });
     env3.sandbox.fetch = okFetch(env3);
     vm.runInContext(src, env3.sandbox);
     await flush();
     (video3.listeners.ended || []).forEach((fn) => fn());
     assert.strictEqual(video3.paused, true, 'end-of-video sleep stops playback');
-    const saved3 = env3.storageSetCalls.map((c) => c.ytnf_prefs).filter(Boolean).pop();
-    assert.strictEqual(saved3.queue.length, 1, 'queue was NOT advanced past the sleep stop');
     console.log('PASS 51 sleep timer: arm, expire, end-of-video');
   }
 
@@ -1732,7 +1682,7 @@ const okFetch = (env) => (u) => {
       if (String(url).includes('raw.githubusercontent.com')) {
         return Promise.resolve({
           ok: true, status: 200,
-          json: async () => ({ addons: { 'yt-native-fullscreen@local': { updates: [{ version: '2.15.0', update_link: 'https://example.com/yt-2.15.0.xpi' }] } } }),
+          json: async () => ({ addons: { 'yt-native-fullscreen@local': { updates: [{ version: '2.16.0', update_link: 'https://example.com/yt-2.16.0.xpi' }] } } }),
         });
       }
       return vtt(url);
@@ -1746,7 +1696,7 @@ const okFetch = (env) => (u) => {
     assert.ok(UPD, 'update checker loaded');
     assert.strictEqual(UPD.compareVersions('2.14.0', '2.9.0'), 1, 'version compare');
     const AUI = env.sandbox.window.__ytnfAUI;
-    assert.ok(AUI.updateAvail && AUI.updateAvail.version === '2.15.0', 'newer version surfaced');
+    assert.ok(AUI.updateAvail && AUI.updateAvail.version === '2.16.0', 'newer version surfaced');
     const root = env.player.children.find((c) => c.id === 'ytnf-apple');
     findAll(root, (c) => c.dataset && c.dataset.act === 'menu')[0].click();
     assert.ok(findAll(root, (c) => c.dataset && c.dataset.pick === 'update').length === 1,
@@ -1763,7 +1713,7 @@ const okFetch = (env) => (u) => {
     vm.runInContext(src, env.sandbox);
     await flush();
     const d = env.sandbox.window.__ytnfDiag();
-    assert.ok(d.includes('Version: 2.14.1'), 'diag version');
+    assert.ok(d.includes('Version: 2.15.0'), 'diag version');
     assert.ok(d.includes('Prefs:'), 'diag prefs');
     assert.ok(d.includes('--- log ---'), 'diag log section');
     const root = env.player.children.find((c) => c.id === 'ytnf-apple');
@@ -1824,6 +1774,45 @@ const okFetch = (env) => (u) => {
     await flush();
     assert.strictEqual(env.player.classList.contains('ytnf-hold2x'), false, 'hold class removed on release');
     console.log('PASS 59 hold hides YouTube 2x indicator');
+  }
+
+  // 60. Toast (v2.15, Kurt): centred, padded clear above the
+  // scrub bar, Liquid Glass styling.
+  {
+    const video = makeVideo();
+    const env = makeEnv({ video, playerResponse: captionPR([ytTrack('en', '', 'English')]) });
+    env.sandbox.fetch = okFetch(env);
+    vm.runInContext(src, env.sandbox);
+    await flush();
+    env.sandbox.window.__ytnfToast('Hello toast', 1000);
+    const toast = env.player.children.find((c) => c.id === 'ytnf-toast');
+    assert.ok(toast, 'toast attached to the player');
+    assert.ok(toast.style.cssText.includes('bottom:124px'), 'padded above the scrub bar');
+    assert.ok(toast.style.cssText.includes('translateX(-50%)'), 'centred');
+    assert.ok(toast.style.cssText.includes('blur(24px)'), 'glass blur');
+    assert.ok(toast.style.cssText.includes('padding:11px 18px'), 'padded');
+    console.log('PASS 60 toast above the scrub bar, liquid glass');
+  }
+
+  // 61. Metadata card (v2.15, Kurt): the title / channel /
+  // description block is one grouped card; the description is
+  // the inset card inside it.
+  {
+    const video = makeVideo();
+    const env = makeEnv({ video, playerResponse: captionPR([ytTrack('en', '', 'English')]) });
+    env.sandbox.fetch = okFetch(env);
+    vm.runInContext(src, env.sandbox);
+    await flush();
+    const metaHost = { shadowRoot: null, style: {} };
+    const doc = env.sandbox.document;
+    const origQS = doc.querySelector.bind(doc);
+    doc.querySelector = (sel) => (sel === 'ytd-watch-metadata' ? metaHost : origQS(sel));
+    env.sandbox.window.__ytnfStyleBelow();
+    assert.strictEqual(metaHost.style.background, 'rgba(30,30,34,.94)', 'metadata host is the grouped card');
+    assert.strictEqual(metaHost.style.borderRadius, '16px', 'card radius');
+    const bg = env.sandbox.window.__ytnfBelowGlass;
+    assert.ok(bg.metadata.includes('rgba(255,255,255,.07)'), 'description is the inset card');
+    console.log('PASS 61 metadata grouped card + inset description');
   }
 
   console.log('ALL 59 TESTS PASS');

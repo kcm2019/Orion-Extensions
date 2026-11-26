@@ -284,14 +284,29 @@ ytd-playlist-panel-video-renderer {
 ytd-playlist-panel-video-renderer:hover {
   background: rgba(255, 255, 255, 0.07) !important;
 }
+/* Encapsulated queue rows (v2.15): each row reads as its own
+   rounded card inside the panel; the row being touch-dragged
+   lifts with a solid surface + shadow (content.js drives the
+   transforms; .ytnf-dragging is ours). */
+ytd-playlist-panel-renderer ytd-playlist-panel-video-renderer {
+  border-radius: 10px;
+  margin: 2px 8px;
+}
+ytd-playlist-panel-renderer ytd-playlist-panel-video-renderer.ytnf-dragging {
+  background: rgba(58, 58, 64, 0.97);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
+}
 ytd-playlist-panel-video-renderer[selected] {
   background: rgba(10, 132, 255, 0.16) !important;
   border-radius: 10px;
 }
+/* The description lives in the metadata shadow root (the live
+   styling is injected there by content.js); this mirrors it for
+   any layout where it is light DOM: an inset card inside the
+   grouped metadata card. */
 ytd-watch-metadata #description.ytd-watch-metadata {
-  background: rgba(30, 30, 34, 0.94) !important;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.07) !important;
+  border-radius: 10px;
 }
 ytd-watch-metadata #title.ytd-watch-metadata h1,
 ytd-watch-metadata h1.title {

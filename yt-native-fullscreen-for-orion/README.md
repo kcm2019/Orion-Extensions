@@ -84,7 +84,16 @@ Firefox Manifest V2 extension for Orion on iPhone/iPad.
    refraction is native-only); off = the classic frosted glass.
    The AirPlay button calls WebKit's playback-target picker
    where available.
-8. **The big round** (v2.14) — the below-player UI was
+8. **Native-iPad pass** (v2.15) — the toast moved up clear of
+   the scrub bar (centred, padded, Liquid Glass); the Settings
+   Queue page is GONE (YouTube's own Queue panel below the
+   player is the queue now — its rows are encapsulated cards
+   and rows drag with the finger, iOS-style, with YouTube's own
+   reorder committing on release; the Autoplay toggle moved to
+   the main Settings page); the title / channel / description
+   block is one grouped card with the description as an inset
+   card inside it.
+9. **The big round** (v2.14) — the below-player UI was
    rebuilt (the v2.12 glass fought the components: blur over a
    scrolling list, internals forced transparent; it is now a
    near-solid iOS grouped card — one hairline, 12px radius,
@@ -184,7 +193,7 @@ Notes / trade-offs:
 
 ## Install in Orion (iPhone / iPad)
 
-1. Download `yt-native-fullscreen-orion-2.14.1.zip` to your iPhone
+1. Download `yt-native-fullscreen-orion-2.15.0.zip` to your iPhone
    (Files → Downloads). **Don't unzip it.** The `.xpi` is the same
    package. If you installed v1.0/v1.1, remove that version first.
 2. Orion: **Settings → Extensions** → turn **Firefox extensions** on.
@@ -197,7 +206,7 @@ Notes / trade-offs:
    **Settings → Accessibility → Subtitles & Captioning →
    Closed Captions + SDH** is on.
 
-## On-device checks for v2.14.0
+## On-device checks for v2.15.0
 
 1. Open a video and tap it: the centre cluster appears (↺10,
    play/pause, 10↻) plus the glass bottom bar. Tap again to
@@ -239,7 +248,13 @@ Notes / trade-offs:
     video the centre pause button, ±10s skips and scrubber must
     all work immediately, the times must belong to the new video,
     and pausing must keep the UI up.
-11. **v2.14.1 fixes**: during hold-to-2x, YouTube's own 2x
+11. **v2.15 checks**: toasts float above the scrub bar, never
+    touching it; Settings has no Queue row (Autoplay sits on
+    the main page); in YouTube's Queue box, press a row's grip
+    and drag — the row should ride your finger and the order
+    should stick on release; title + description read as one
+    card with the description inset.
+12. **v2.14.1 fixes**: during hold-to-2x, YouTube's own 2x
     indicator should NOT appear (only our chip); scrubbing a
     video should show a real preview thumbnail in the bubble
     (v2.14.0's storyboard parse used the wrong field layout,

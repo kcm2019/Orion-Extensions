@@ -1,5 +1,5 @@
 'use strict';
-/* YT Native Fullscreen for Orion v2.14.1 (Firefox MV2)
+/* YT Native Fullscreen for Orion v2.15.0 (Firefox MV2)
  *
  * v1.0: fullscreen a YouTube video -> iOS native player, via
  *   video.webkitEnterFullscreen() called synchronously in the tap.
@@ -54,7 +54,7 @@
     large: '480p', medium: '360p', small: '240p', tiny: '144p',
   };
 
-  var VERSION = '2.14.1';
+  var VERSION = '2.15.0';
   var LOGBUF = [];
   function log() {
     var msg = '';
@@ -570,13 +570,21 @@
       var el = document.createElement('div');
       el.id = 'ytnf-toast';
       el.textContent = msg;
+      // v2.15 (Kurt): the toast used to sit at bottom:64px and
+      // clipped into the scrub bar. It is now centred and padded
+      // well clear above the bar, in the same Liquid Glass as the
+      // rest of the overlay (dark sheen when Liquid Glass is on).
+      var toastGlass = PREFS.liquidGlass
+        ? 'linear-gradient(135deg,rgba(255,255,255,.20),rgba(255,255,255,.05) 45%,rgba(255,255,255,.02)),' +
+          'linear-gradient(rgba(22,22,27,.44),rgba(22,22,27,.44))'
+        : 'rgba(28,28,30,.42)';
       el.style.cssText =
-        'position:absolute;left:12px;bottom:64px;z-index:2147483646;' +
-        'background:rgba(28,28,30,.42);color:#fff;padding:9px 13px;' +
+        'position:absolute;left:50%;transform:translateX(-50%);bottom:124px;z-index:2147483646;' +
+        'background:' + toastGlass + ';color:#fff;padding:11px 18px;text-align:center;' +
         '-webkit-backdrop-filter:blur(24px) saturate(200%);backdrop-filter:blur(24px) saturate(200%);' +
         'border:1px solid rgba(255,255,255,.16);box-shadow:0 10px 30px rgba(0,0,0,.4);' +
-        'border-radius:12px;font:13px -apple-system,system-ui,sans-serif;font-weight:500;' +
-        'pointer-events:none;max-width:82%;line-height:1.35;';
+        'border-radius:14px;font:13px -apple-system,system-ui,sans-serif;font-weight:500;' +
+        'pointer-events:none;max-width:86%;line-height:1.35;';
       if (host === document.body) el.style.position = 'fixed';
       host.appendChild(el);
       if (CAP.toastTimer) clearTimeout(CAP.toastTimer);
@@ -1282,87 +1290,12 @@
     return CAP.video;
   }
 
-  /* ---------------- queue (Kurt's locked rule, Nov 5) ----------------
-   * Our own queue always plays next at video end. If the queue is
-   * empty: autoplayNext ON lets YouTube's first Up Next play; OFF
-   * stops at the end (and YouTube's own autonav toggle is synced
-   * off so it can't override the stop). The toggle never gates
-   * the queue itself. */
-  function scrapeUpNext() {
-    // v2.9 queue fix: the old scrape only knew the classic
-    // ytd-compact-video-renderer. Watching from a queue (Kurt's
-    // screenshot) puts ytd-playlist-panel-video-renderer items in
-    // the rail, and current Up Next markup uses yt-lockup-view-
-    // model cards — both scraped empty, so the Queue page offered
-    // nothing to add. Sources now, in order: YouTube's queue
-    // panel, classic renderers, lockup cards, then any watch link
-    // in the secondary column as a fallback.
-    var out = [];
-    var seen = {};
-    function grab(links, rendererSel) {
-      if (!links) return;
-      for (var i = 0; i < links.length && out.length < 12; i++) {
-        var a = links[i];
-        var href = '';
-        try { href = a.getAttribute('href') || ''; } catch (e) {}
-        var m = /[?&]v=([\w-]{6,})/.exec(href);
-        if (!m) continue;
-        var id = m[1];
-        if (seen[id] || id === CAP.videoId) continue;
-        seen[id] = 1;
-        var title = '';
-        try { title = a.getAttribute('title') || a.getAttribute('aria-label') || ''; } catch (e) {}
-        if (!title) {
-          try {
-            var r = a.closest && a.closest(rendererSel);
-            var t = r && r.querySelector('#video-title');
-            if (t) {
-              try { title = t.getAttribute('title') || ''; } catch (e) {}
-              if (!title) title = (t.textContent || '').trim();
-            }
-          } catch (e) {}
-        }
-        if (!title) {
-          // Lockup title links carry the title as their text.
-          try {
-            var tx = (a.textContent || '').trim();
-            if (tx && tx.length <= 200) title = tx;
-          } catch (e) {}
-        }
-        out.push({ id: id, title: title || id });
-      }
-    }
-    try {
-      grab(document.querySelectorAll(
-        'ytd-playlist-panel-video-renderer a[href*="/watch?v="]'),
-        'ytd-playlist-panel-video-renderer');
-      grab(document.querySelectorAll(
-        'ytd-compact-video-renderer a[href*="/watch?v="], ' +
-        'ytd-compact-radio-renderer a[href*="/watch?v="]'),
-        'ytd-compact-video-renderer, ytd-compact-radio-renderer');
-      grab(document.querySelectorAll(
-        'yt-lockup-view-model a[href*="/watch?v="]'),
-        'yt-lockup-view-model');
-      grab(document.querySelectorAll(
-        'ytd-watch-next-secondary-results-renderer a[href*="/watch?v="]'),
-        'ytd-compact-video-renderer, yt-lockup-view-model, ' +
-        'ytd-playlist-panel-video-renderer');
-    } catch (e) {}
-    return out;
-  }
-
-  function queueAdd(item) {
-    if (!item || !item.id) return;
-    if (PREFS.queue.some(function (q) { return q.id === item.id; })) {
-      showToast('Already in queue: ' + item.title, 2000);
-      return;
-    }
-    PREFS.queue.push({ id: item.id, title: item.title || item.id });
-    savePrefs();
-    showToast('Queued: ' + item.title, 2000);
-    log('queue add', item.id, '— queue size', PREFS.queue.length);
-  }
-
+  /* ---------------- autoplay sync ----------------
+   * v2.15 (Kurt): our custom Settings queue is gone — YouTube's
+   * own Queue panel below the player is the queue now (restyled +
+   * touch-draggable, see the panel code). What remains here is the
+   * autoplay preference: ON lets YouTube's Up Next proceed at the
+   * end; OFF stops playback there. */
   function ensureYouTubeAutoplay(wantOn) {
     var b = null;
     try { b = document.querySelector('.ytp-autonav-toggle-button'); } catch (e) {}
@@ -1393,20 +1326,12 @@
       log('sleep timer: stopped at end of video');
       return;
     }
-    if (PREFS.queue.length) {
-      var next = PREFS.queue.shift();
-      savePrefs();
-      log('queue: advancing to', next.id);
-      showToast('Up next from your queue: ' + next.title, 2500);
-      try { location.href = 'https://www.youtube.com/watch?v=' + next.id; } catch (e) {}
-      return;
-    }
     if (!PREFS.autoplayNext) {
       ensureYouTubeAutoplay(false);
       try { if (CAP.video) CAP.video.pause(); } catch (e) {}
-      log('queue empty + autoplay off: stopping at end');
+      log('autoplay off: stopping at end');
     }
-    // Queue empty + autoplay on: YouTube's own Up Next proceeds.
+    // Autoplay on: YouTube's own queue / Up Next proceeds.
   }
 
   function wireEnded(v) {
@@ -1468,6 +1393,7 @@
     armSleepTimer();
   }
   try { window.__ytnfSleepTick = sleepTick; } catch (e) {}
+  try { window.__ytnfToast = showToast; } catch (e) {}
 
   /* ---- B: SponsorBlock (built in) ---- */
   var SB = { videoId: null, segments: [], skipped: {} };
@@ -1662,7 +1588,7 @@
         var f = parts[i].split('#');
         // Real board format (yt-dlp's parse, verified Nov 26):
         // width#height#frameCount#cols#rows#intervalMs#nameTemplate#sigh.
-        // v2.14.1 read cols as the interval and the interval as the
+        // v2.15.0 read cols as the interval and the interval as the
         // sigh, so every sheet URL failed and no preview ever loaded.
         if (f.length !== 8) continue;
         var b = {
@@ -1888,10 +1814,18 @@
       panel.appendChild(panelRow('Playback Speed', fmtSpeed(PREFS.speed), {
         page: 'speed', onPick: function () { renderPanel('speed'); },
       }));
-      panel.appendChild(panelRow('Queue',
-        PREFS.queue.length ? PREFS.queue.length + ' queued' : 'Empty', {
-          page: 'queue', onPick: function () { renderPanel('queue'); },
-        }));
+      panel.appendChild(panelRow('Autoplay Up Next', PREFS.autoplayNext ? 'On' : 'Off', {
+        pick: 'autoplay', active: PREFS.autoplayNext,
+        onPick: function () {
+          PREFS.autoplayNext = !PREFS.autoplayNext;
+          savePrefs();
+          ensureYouTubeAutoplay(PREFS.autoplayNext);
+          showToast(PREFS.autoplayNext
+            ? 'Autoplay on — YouTube plays what is next'
+            : 'Autoplay off — playback stops at the end', 2200);
+          renderPanel('main');
+        },
+      }));
       panel.appendChild(panelRow('Liquid Glass UI', PREFS.liquidGlass ? 'On' : 'Off', {
         pick: 'liquid', active: PREFS.liquidGlass,
         onPick: function () {
@@ -2088,93 +2022,6 @@
           },
         }));
       });
-    } else if (page === 'queue') {
-      panel.appendChild(panelHeader('Queue', true));
-      panel.appendChild(panelRow('Autoplay Up Next', PREFS.autoplayNext ? 'On' : 'Off', {
-        pick: 'autoplay', active: PREFS.autoplayNext,
-        onPick: function () {
-          PREFS.autoplayNext = !PREFS.autoplayNext;
-          savePrefs();
-          ensureYouTubeAutoplay(PREFS.autoplayNext);
-          showToast(PREFS.autoplayNext
-            ? 'Autoplay on: first Up Next plays when the queue is empty'
-            : 'Autoplay off: playback stops at the end when the queue is empty', 2600);
-          renderPanel('queue');
-        },
-      }));
-      if (PREFS.queue.length) {
-        panel.appendChild(panelDivider());
-        PREFS.queue.forEach(function (q, idx) {
-          var row = panelRow((idx + 1) + '. ' + q.title, '▶', {
-            pick: 'qplay:' + q.id,
-            onPick: function () {
-              PREFS.queue.splice(idx, 1);
-              savePrefs();
-              closePanel(); hideUI();
-              try { location.href = 'https://www.youtube.com/watch?v=' + q.id; } catch (e) {}
-            },
-          });
-          row.dataset.qplay = q.id;
-          // v2.11: touch-first reordering for our queue — big
-          // up/down targets instead of anything drag-based.
-          [['↑', 'qup', -1], ['↓', 'qdown', 1]].forEach(function (mv) {
-            if ((mv[2] < 0 && idx === 0) ||
-                (mv[2] > 0 && idx === PREFS.queue.length - 1)) return;
-            var mvBtn = document.createElement('span');
-            mvBtn.textContent = mv[0];
-            mvBtn.dataset[mv[1]] = q.id;
-            mvBtn.style.cssText = 'color:rgba(255,255,255,.8);padding:10px 9px;font-size:15px;flex:none;';
-            mvBtn.addEventListener('click', function (e) {
-              try { e.stopPropagation(); } catch (err) {}
-              var j = idx + mv[2];
-              if (j < 0 || j >= PREFS.queue.length) return;
-              var tmp = PREFS.queue[idx];
-              PREFS.queue[idx] = PREFS.queue[j];
-              PREFS.queue[j] = tmp;
-              savePrefs();
-              renderPanel('queue');
-            });
-            row.appendChild(mvBtn);
-          });
-          var x = document.createElement('span');
-          x.textContent = '✕';
-          x.dataset.qremove = q.id;
-          x.style.cssText = 'color:rgba(255,255,255,.65);padding:6px 8px;font-size:14px;flex:none;';
-          x.addEventListener('click', function (e) {
-            try { e.stopPropagation(); } catch (err) {}
-            PREFS.queue = PREFS.queue.filter(function (it) { return it.id !== q.id; });
-            savePrefs();
-            renderPanel('queue');
-          });
-          row.appendChild(x);
-          panel.appendChild(row);
-        });
-        panel.appendChild(panelRow('Clear queue', null, {
-          pick: 'qclear',
-          onPick: function () { PREFS.queue = []; savePrefs(); renderPanel('queue'); },
-        }));
-      }
-      var ups = scrapeUpNext();
-      if (ups.length) {
-        panel.appendChild(panelDivider());
-        var lbl = document.createElement('div');
-        lbl.textContent = 'Up Next — tap to add';
-        lbl.style.cssText = 'padding:6px 12px 2px;font-size:12.5px;color:rgba(255,255,255,.55);' + FONT;
-        panel.appendChild(lbl);
-        ups.forEach(function (u) {
-          var r2 = panelRow(u.title, '+ Add', {
-            onPick: function () { queueAdd(u); renderPanel('queue'); },
-          });
-          r2.dataset.qadd = u.id;
-          panel.appendChild(r2);
-        });
-      }
-      if (!PREFS.queue.length && !ups.length) {
-        var none = document.createElement('div');
-        none.textContent = 'Queue is empty.';
-        none.style.cssText = 'padding:8px 12px;font-size:13.5px;color:rgba(255,255,255,.6);' + FONT;
-        panel.appendChild(none);
-      }
     } else if (page === 'cc') {
       panel.appendChild(panelHeader('Captions', true));
       panel.appendChild(panelRow('Auto', null, {
@@ -3086,16 +2933,19 @@
     } catch (e) {}
   }
 
-  /* ---------------- queue panel touch drag (v2.11) ----------------
-   * YouTube's Queue box reorders by mouse drag on the item's
-   * handle — HTML5 drag events, which touch never produces, so
-   * on a touchscreen the order is effectively frozen (Kurt).
-   * This translates a handle-zone touch drag into the drag
-   * events YouTube's own reorder handler listens for
-   * (dragstart / dragover / drop / dragend with a DataTransfer),
-   * so the reorder goes through YouTube's own model. Drags must
-   * start on the left handle zone of an item; the rest of the
-   * item still taps and scrolls normally. */
+  /* ---------------- queue panel touch drag (v2.15) ----------------
+   * Kurt: encapsulate YouTube's own Queue box and make dragging
+   * its rows work with a touchscreen. v2.11 only translated the
+   * gesture into drag events — YouTube's model got them, but the
+   * row itself never moved under the finger, so it felt broken.
+   * Now the drag is OURS visually (iOS-style: the row lifts, rides
+   * the finger, siblings slide out of the way) and on release we
+   * hand the result to YouTube's own reorder handler as a
+   * synthesized dragstart/dragover/drop/dragend sequence aimed at
+   * the row the finger ended on, so YouTube's model commits the
+   * new order. Drags start from the row's grip zone (or an
+   * explicit drag handle); the rest of the row still taps to play
+   * and scrolls the list. */
   var qdWired = false;
   var qd = null;
   function makeDataTransfer() {
@@ -3122,6 +2972,32 @@
       el.dispatchEvent(ev);
     } catch (err) {}
   }
+  function qdRows(item) {
+    var rows = [];
+    try {
+      var p = item.parentNode;
+      var kids = p && p.children ? p.children : [item];
+      for (var i = 0; i < kids.length; i++) {
+        var k = kids[i];
+        if (k && k.tagName &&
+            String(k.tagName).toLowerCase() === 'ytd-playlist-panel-video-renderer') rows.push(k);
+      }
+    } catch (e) {}
+    return rows.length ? rows : [item];
+  }
+  function qdCleanup() {
+    if (!qd) return;
+    try {
+      (qd.rows || []).forEach(function (r) {
+        try { r.style.transform = ''; r.style.transition = ''; } catch (e) {}
+      });
+      qd.item.classList.remove('ytnf-dragging');
+      qd.item.style.transform = '';
+      qd.item.style.zIndex = '';
+      qd.item.style.position = '';
+    } catch (e) {}
+    qd = null;
+  }
   function wireQueueTouchDrag() {
     if (qdWired) return;
     qdWired = true;
@@ -3136,34 +3012,72 @@
       if (!rect) return;
       var onHandle = false;
       try { onHandle = !!t.closest('[class*="drag"], [id*="drag"]'); } catch (err) {}
-      if (!onHandle && e.clientX - rect.left > 48) return;
-      qd = { item: item, x: e.clientX, y: e.clientY, active: false, over: null, dt: null };
+      if (!onHandle && e.clientX - rect.left > 56) return;
+      // A press on the grip is a tap-that-does-nothing or a drag —
+      // never a list scroll.
+      try { e.preventDefault(); } catch (err) {}
+      qd = { item: item, x: e.clientX, y: e.clientY, active: false, dt: null,
+             rows: null, index: -1, target: -1, rowH: rect.height || 0 };
     }, true);
     document.addEventListener('pointermove', function (e) {
       if (!qd) return;
       if (!qd.active) {
         if (Math.abs(e.clientY - qd.y) < 9 && Math.abs(e.clientX - qd.x) < 9) return;
         qd.active = true;
+        qd.rows = qdRows(qd.item);
+        qd.index = qd.rows.indexOf(qd.item);
+        qd.target = qd.index;
+        if (!qd.rowH) {
+          try { qd.rowH = qd.item.getBoundingClientRect().height || 0; } catch (err) {}
+        }
         qd.dt = makeDataTransfer();
         fireDrag(qd.item, 'dragstart', e, qd.dt);
+        try {
+          qd.item.classList.add('ytnf-dragging');
+          qd.item.style.position = 'relative';
+          qd.item.style.zIndex = '30';
+          qd.rows.forEach(function (r) {
+            if (r !== qd.item) r.style.transition = 'transform .18s ease';
+          });
+        } catch (err) {}
       }
-      var over = null;
-      try {
-        var el = document.elementFromPoint && document.elementFromPoint(e.clientX, e.clientY);
-        if (el && typeof el.closest === 'function') {
-          over = el.closest('ytd-playlist-panel-video-renderer');
-        }
-      } catch (err) {}
-      if (over) { qd.over = over; fireDrag(over, 'dragover', e, qd.dt); }
+      var dy = e.clientY - qd.y;
+      var maxUp = -qd.index * qd.rowH;
+      var maxDown = (qd.rows.length - 1 - qd.index) * qd.rowH;
+      if (dy < maxUp) dy = maxUp;
+      if (dy > maxDown) dy = maxDown;
+      try { qd.item.style.transform = 'translateY(' + dy + 'px)'; } catch (err) {}
+      var target = qd.index;
+      if (qd.rowH > 0) {
+        target = qd.index + Math.round(dy / qd.rowH);
+        if (target < 0) target = 0;
+        if (target > qd.rows.length - 1) target = qd.rows.length - 1;
+      }
+      qd.target = target;
+      qd.rows.forEach(function (r, p) {
+        if (r === qd.item) return;
+        var shift = 0;
+        if (target > qd.index && p > qd.index && p <= target) shift = -qd.rowH;
+        if (target < qd.index && p < qd.index && p >= target) shift = qd.rowH;
+        try { r.style.transform = shift ? 'translateY(' + shift + 'px)' : ''; } catch (err) {}
+      });
+      var over = qd.rows[target];
+      if (over && over !== qd.item) fireDrag(over, 'dragover', e, qd.dt);
       try { e.preventDefault(); } catch (err) {}
     }, true);
     function endDrag(e, cancelled) {
       if (!qd) return;
-      if (qd.active) {
-        if (!cancelled && qd.over) fireDrag(qd.over, 'drop', e, qd.dt);
-        fireDrag(qd.item, 'dragend', e, qd.dt);
+      var wasActive = qd.active;
+      var item = qd.item, rows = qd.rows, index = qd.index,
+        target = qd.target, dt = qd.dt;
+      if (wasActive) {
+        if (!cancelled && rows && target !== index && rows[target]) {
+          fireDrag(rows[target], 'dragover', e, dt);
+          fireDrag(rows[target], 'drop', e, dt);
+        }
+        fireDrag(item, 'dragend', e, dt);
       }
-      qd = null;
+      qdCleanup();
     }
     document.addEventListener('pointerup', function (e) { endDrag(e, false); }, true);
     document.addEventListener('pointercancel', function (e) { endDrag(e, true); }, true);
@@ -3188,11 +3102,14 @@
       ' border: 1px solid rgba(255,255,255,.10) !important;' +
       ' border-radius: 12px !important; }' +
       ' #header { background: rgba(30,30,34,.94) !important;' +
-      ' border-bottom: 1px solid rgba(255,255,255,.07) !important; }',
+      ' border-bottom: 1px solid rgba(255,255,255,.07) !important;' +
+      ' font-weight: 600; letter-spacing: -.01em; }',
     metadata:
-      '#description { background: rgba(30,30,34,.94) !important;' +
-      ' border: 1px solid rgba(255,255,255,.08) !important;' +
-      ' border-radius: 12px !important; }' +
+      // v2.15: the host is the grouped card now (inline, below);
+      // the description sits inside it as a lighter inset card,
+      // iOS grouped-list style.
+      '#description { background: rgba(255,255,255,.07) !important;' +
+      ' border-radius: 10px !important; }' +
       ' #title h1 { font-weight: 600; letter-spacing: -.01em; }',
   };
   function injectShadowGlass(host, cssText) {
@@ -3232,7 +3149,19 @@
         injectShadowGlass(panel, BELOW_GLASS.panel);
       }
       var meta = document.querySelector('ytd-watch-metadata');
-      if (meta) injectShadowGlass(meta, BELOW_GLASS.metadata);
+      if (meta) {
+        // v2.15 (Kurt): the whole title / channel / description
+        // block becomes one grouped card, native-iPad style; the
+        // description is the inset card inside it (shadow CSS).
+        try {
+          meta.style.background = 'rgba(30,30,34,.94)';
+          meta.style.border = '1px solid rgba(255,255,255,.10)';
+          meta.style.borderRadius = '16px';
+          meta.style.padding = '14px 16px';
+          meta.style.boxSizing = 'border-box';
+        } catch (err) {}
+        injectShadowGlass(meta, BELOW_GLASS.metadata);
+      }
     } catch (err) {}
   }
   var belowGlassTimer = null;

@@ -11,7 +11,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '2.16.0';
+  var VERSION = '2.17.0';
   var ADDON_ID = 'yt-native-fullscreen@local';
   var FEED_URL = 'https://raw.githubusercontent.com/kcm2019/Orion-Extensions/main/updates.json';
   var THROTTLE_MS = 12 * 60 * 60 * 1000; // 12 h between auto checks

@@ -54,7 +54,7 @@
     large: '480p', medium: '360p', small: '240p', tiny: '144p',
   };
 
-  var VERSION = '2.16.0';
+  var VERSION = '2.17.0';
   var LOGBUF = [];
   function log() {
     var msg = '';
@@ -3169,6 +3169,24 @@
       ' #header { background: transparent !important;' +
       ' border-bottom: 1px solid rgba(255,255,255,.10) !important;' +
       ' font-weight: 600; letter-spacing: -.01em; }',
+    panelLight:
+      ':host { background: rgba(255,255,255,.94) !important;' +
+      ' border: 1px solid rgba(0,0,0,.08) !important;' +
+      ' border-radius: 12px !important; }' +
+      ' #header { background: rgba(255,255,255,.94) !important;' +
+      ' border-bottom: 1px solid rgba(0,0,0,.06) !important;' +
+      ' font-weight: 600; letter-spacing: -.01em; }',
+    panelLiquidLight:
+      ':host { background: linear-gradient(135deg, rgba(255,255,255,.70),' +
+      ' rgba(255,255,255,.28) 45%, rgba(255,255,255,.18)),' +
+      ' linear-gradient(rgba(250,250,252,.46), rgba(250,250,252,.46)) !important;' +
+      ' -webkit-backdrop-filter: blur(24px) saturate(200%) !important;' +
+      ' backdrop-filter: blur(24px) saturate(200%) !important;' +
+      ' border: 1px solid rgba(0,0,0,.07) !important;' +
+      ' border-radius: 16px !important; }' +
+      ' #header { background: transparent !important;' +
+      ' border-bottom: 1px solid rgba(0,0,0,.06) !important;' +
+      ' font-weight: 600; letter-spacing: -.01em; }',
     metadata:
       // v2.15: the host is the grouped card now (inline, below);
       // the description sits inside it as a lighter inset card,
@@ -3176,7 +3194,40 @@
       '#description { background: rgba(255,255,255,.07) !important;' +
       ' border-radius: 10px !important; }' +
       ' #title h1 { font-weight: 600; letter-spacing: -.01em; }',
+    // v2.17 (Kurt): light-mode twin of the metadata card. The
+    // description's text renders light-on-dark inside this block
+    // even on a light page (YouTube scopes the block's palette
+    // separately), so the light card also re-points the text
+    // variables and the two most visible text blocks at dark
+    // ink — otherwise white text would land on a white card.
+    metadataLight:
+      ':host { --yt-spec-text-primary: #0f0f0f !important;' +
+      ' --yt-spec-text-secondary: #606060 !important; }' +
+      ' #description { background: rgba(0,0,0,.045) !important;' +
+      ' border-radius: 10px !important; color: #0f0f0f !important; }' +
+      ' #title h1 { font-weight: 600; letter-spacing: -.01em;' +
+      ' color: #0f0f0f !important; }',
   };
+  // The page's apparent theme, measured (the computed body
+  // background is ground truth; YouTube's own [dark] attribute
+  // is the fallback). Stamped on <html> for player.css.
+  function pageTheme() {
+    try {
+      var bg = getComputedStyle(document.body).backgroundColor || '';
+      var m = bg.match(/rgba?\(([^)]+)\)/);
+      if (m) {
+        var p = m[1].split(',').map(function (x) { return parseFloat(x); });
+        if (!(p.length >= 4 && p[3] === 0)) {
+          var lum = (0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2]) / 255;
+          return lum > 0.5 ? 'light' : 'dark';
+        }
+      }
+    } catch (e) {}
+    try {
+      return document.documentElement.hasAttribute('dark') ? 'dark' : 'light';
+    } catch (e) {}
+    return 'dark';
+  }
   function injectShadowGlass(host, cssText, key) {
     if (!host) return false;
     var root = null;
@@ -3212,43 +3263,58 @@
   }
   function styleBelowPlayer() {
     try {
+      var theme = pageTheme();
+      try { document.documentElement.setAttribute('data-ytnf-theme', theme); } catch (err) {}
+      var light = theme === 'light';
       var panel = document.querySelector('ytd-playlist-panel-renderer');
       if (panel) {
         if (PREFS.liquidGlass) {
           try {
-            panel.style.background =
-              'linear-gradient(135deg,rgba(255,255,255,.20),rgba(255,255,255,.05) 45%,rgba(255,255,255,.02)),' +
-              'linear-gradient(rgba(22,22,27,.44),rgba(22,22,27,.44))';
+            panel.style.background = light
+              ? 'linear-gradient(135deg,rgba(255,255,255,.70),rgba(255,255,255,.28) 45%,rgba(255,255,255,.18)),' +
+                'linear-gradient(rgba(250,250,252,.46),rgba(250,250,252,.46))'
+              : 'linear-gradient(135deg,rgba(255,255,255,.20),rgba(255,255,255,.05) 45%,rgba(255,255,255,.02)),' +
+                'linear-gradient(rgba(22,22,27,.44),rgba(22,22,27,.44))';
             panel.style.backdropFilter = 'blur(24px) saturate(200%)';
             panel.style.webkitBackdropFilter = 'blur(24px) saturate(200%)';
-            panel.style.border = '1px solid rgba(255,255,255,.16)';
+            panel.style.border = light
+              ? '1px solid rgba(0,0,0,.07)' : '1px solid rgba(255,255,255,.16)';
             panel.style.borderRadius = '16px';
           } catch (err) {}
-          injectShadowGlass(panel, BELOW_GLASS.panelLiquid, 'liquid');
+          injectShadowGlass(panel,
+            light ? BELOW_GLASS.panelLiquidLight : BELOW_GLASS.panelLiquid,
+            'liquid-' + theme);
         } else {
           try {
-            panel.style.background = 'rgba(30,30,34,.94)';
+            panel.style.background = light ? 'rgba(255,255,255,.94)' : 'rgba(30,30,34,.94)';
             panel.style.backdropFilter = '';
             panel.style.webkitBackdropFilter = '';
-            panel.style.border = '1px solid rgba(255,255,255,.10)';
+            panel.style.border = light
+              ? '1px solid rgba(0,0,0,.08)' : '1px solid rgba(255,255,255,.10)';
             panel.style.borderRadius = '12px';
           } catch (err) {}
-          injectShadowGlass(panel, BELOW_GLASS.panel, 'classic');
+          injectShadowGlass(panel,
+            light ? BELOW_GLASS.panelLight : BELOW_GLASS.panel,
+            'classic-' + theme);
         }
       }
       var meta = document.querySelector('ytd-watch-metadata');
       if (meta) {
-        // v2.15 (Kurt): the whole title / channel / description
-        // block becomes one grouped card, native-iPad style; the
-        // description is the inset card inside it (shadow CSS).
+        // The title / channel / description block is one grouped
+        // card, native-iPad style; the description is the inset
+        // card inside it (shadow CSS). Colours follow the page
+        // theme (v2.17); the dark values are unchanged.
         try {
-          meta.style.background = 'rgba(30,30,34,.94)';
-          meta.style.border = '1px solid rgba(255,255,255,.10)';
+          meta.style.background = light ? 'rgba(255,255,255,.94)' : 'rgba(30,30,34,.94)';
+          meta.style.border = light
+            ? '1px solid rgba(0,0,0,.08)' : '1px solid rgba(255,255,255,.10)';
           meta.style.borderRadius = '16px';
           meta.style.padding = '14px 16px';
           meta.style.boxSizing = 'border-box';
         } catch (err) {}
-        injectShadowGlass(meta, BELOW_GLASS.metadata);
+        injectShadowGlass(meta,
+          light ? BELOW_GLASS.metadataLight : BELOW_GLASS.metadata,
+          'meta-' + theme);
       }
     } catch (err) {}
   }

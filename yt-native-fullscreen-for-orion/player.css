@@ -341,3 +341,31 @@ ytd-feed-filter-chip-bar-renderer yt-chip-cloud-chip-renderer {
   border: 1px solid rgba(255, 255, 255, 0.10);
   border-radius: 999px;
 }
+
+/* ---------- light mode (v2.17) ----------
+   content.js measures the page's background and stamps
+   data-ytnf-theme on <html>. Everything above stays the dark
+   design untouched; these overrides are the light twins for
+   the below-player surfaces only (the player itself always
+   sits over video and keeps the dark glass in both themes). */
+html[data-ytnf-theme="light"] ytd-playlist-panel-renderer {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+html[data-ytnf-theme="light"] ytd-playlist-panel-renderer #header.ytd-playlist-panel-renderer {
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+html[data-ytnf-theme="light"] ytd-playlist-panel-video-renderer:hover {
+  background: rgba(0, 0, 0, 0.05) !important;
+}
+html[data-ytnf-theme="light"] ytd-playlist-panel-renderer ytd-playlist-panel-video-renderer.ytnf-dragging {
+  background: rgba(255, 255, 255, 0.88);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+html[data-ytnf-theme="light"] ytd-menu-popup-renderer {
+  background: rgba(255, 255, 255, 0.78) !important;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+html[data-ytnf-theme="light"] ytd-watch-metadata #description.ytd-watch-metadata {
+  background: rgba(0, 0, 0, 0.045) !important;
+}

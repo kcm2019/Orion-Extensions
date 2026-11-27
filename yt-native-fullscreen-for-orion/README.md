@@ -84,7 +84,14 @@ Firefox Manifest V2 extension for Orion on iPhone/iPad.
    refraction is native-only); off = the classic frosted glass.
    The AirPlay button calls WebKit's playback-target picker
    where available.
-8. **Drag + glass fixes** (v2.16) — the queue drag no longer
+8. **Light mode** (v2.17) — the below-player cards (Queue,
+   description/metadata, popup menus) follow the page's
+   light/dark theme: the theme is measured from the page
+   background and every surface has a light twin. Dark mode
+   is pixel-identical to before. In light mode the metadata
+   card also re-points its text variables to dark ink, since
+   YouTube scopes that block's palette separately.
+9. **Drag + glass fixes** (v2.16) — the queue drag no longer
    strands a row hovering: YouTube's reorder now gets the full
    drag lifecycle in one shot at release, cleanup is
    unconditional (plus a watchdog and a delayed sweep), the
@@ -200,7 +207,7 @@ Notes / trade-offs:
 
 ## Install in Orion (iPhone / iPad)
 
-1. Download `yt-native-fullscreen-orion-2.16.0.zip` to your iPhone
+1. Download `yt-native-fullscreen-orion-2.17.0.zip` to your iPhone
    (Files → Downloads). **Don't unzip it.** The `.xpi` is the same
    package. If you installed v1.0/v1.1, remove that version first.
 2. Orion: **Settings → Extensions** → turn **Firefox extensions** on.
@@ -213,7 +220,7 @@ Notes / trade-offs:
    **Settings → Accessibility → Subtitles & Captioning →
    Closed Captions + SDH** is on.
 
-## On-device checks for v2.16.0
+## On-device checks for v2.17.0
 
 1. Open a video and tap it: the centre cluster appears (↺10,
    play/pause, 10↻) plus the glass bottom bar. Tap again to
@@ -255,7 +262,10 @@ Notes / trade-offs:
     video the centre pause button, ±10s skips and scrubber must
     all work immediately, the times must belong to the new video,
     and pausing must keep the UI up.
-11. **v2.16 checks**: drag a queue row — it should land and
+11. **v2.17 checks**: in light mode, the Queue box and the
+    title/description card should be light with readable dark
+    text; dark mode should look exactly as it did in v2.16.
+12. **v2.16 checks**: drag a queue row — it should land and
     STAY (no hovering, no tap needed); with Liquid Glass on,
     the Queue box should look like the player's glass; open a
     queue row's ⋮ menu — glass; toasts fade in and out.

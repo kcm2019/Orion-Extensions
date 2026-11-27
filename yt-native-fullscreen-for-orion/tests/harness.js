@@ -598,7 +598,7 @@ const okFetch = (env) => (u) => {
     }
     const mf = JSON.parse(fs.readFileSync(__dirname + '/../manifest.json', 'utf8'));
     assert.ok(mf.content_scripts[0].css.includes('player.css'), 'manifest loads player.css');
-    assert.strictEqual(mf.version, '2.16.0');
+    assert.strictEqual(mf.version, '2.17.0');
     console.log('PASS 16 reskin is paint-only, no YouTube control hidden or removed');
   }
 
@@ -1683,7 +1683,7 @@ const okFetch = (env) => (u) => {
       if (String(url).includes('raw.githubusercontent.com')) {
         return Promise.resolve({
           ok: true, status: 200,
-          json: async () => ({ addons: { 'yt-native-fullscreen@local': { updates: [{ version: '2.17.0', update_link: 'https://example.com/yt-2.17.0.xpi' }] } } }),
+          json: async () => ({ addons: { 'yt-native-fullscreen@local': { updates: [{ version: '2.18.0', update_link: 'https://example.com/yt-2.18.0.xpi' }] } } }),
         });
       }
       return vtt(url);
@@ -1697,7 +1697,7 @@ const okFetch = (env) => (u) => {
     assert.ok(UPD, 'update checker loaded');
     assert.strictEqual(UPD.compareVersions('2.14.0', '2.9.0'), 1, 'version compare');
     const AUI = env.sandbox.window.__ytnfAUI;
-    assert.ok(AUI.updateAvail && AUI.updateAvail.version === '2.17.0', 'newer version surfaced');
+    assert.ok(AUI.updateAvail && AUI.updateAvail.version === '2.18.0', 'newer version surfaced');
     const root = env.player.children.find((c) => c.id === 'ytnf-apple');
     findAll(root, (c) => c.dataset && c.dataset.act === 'menu')[0].click();
     assert.ok(findAll(root, (c) => c.dataset && c.dataset.pick === 'update').length === 1,
@@ -1714,7 +1714,7 @@ const okFetch = (env) => (u) => {
     vm.runInContext(src, env.sandbox);
     await flush();
     const d = env.sandbox.window.__ytnfDiag();
-    assert.ok(d.includes('Version: 2.16.0'), 'diag version');
+    assert.ok(d.includes('Version: 2.17.0'), 'diag version');
     assert.ok(d.includes('Prefs:'), 'diag prefs');
     assert.ok(d.includes('--- log ---'), 'diag log section');
     const root = env.player.children.find((c) => c.id === 'ytnf-apple');
@@ -1865,5 +1865,49 @@ const okFetch = (env) => (u) => {
     console.log('PASS 63 popup menus: glass UI');
   }
 
-  console.log('ALL 61 TESTS PASS');
+  // 64. Light mode (v2.17, Kurt): when the page background is
+  // light, the below-player cards go light too (dark mode is
+  // untouched — every earlier below-player test runs dark).
+  {
+    const video = makeVideo();
+    const env = makeEnv({ video, playerResponse: captionPR([ytTrack('en', '', 'English')]) });
+    env.sandbox.fetch = okFetch(env);
+    env.sandbox.getComputedStyle = () => ({ backgroundColor: 'rgb(255, 255, 255)' });
+    vm.runInContext(src, env.sandbox);
+    await flush();
+    const mkShadow = () => ({
+      children: [],
+      appendChild(c) { this.children.push(c); return c; },
+      querySelector(sel) {
+        if (String(sel).includes('data-ytnf-glass')) {
+          return this.children.find((c) => c.__ytnfGlass) || null;
+        }
+        return null;
+      },
+    });
+    const panelHost = { shadowRoot: mkShadow(), style: {} };
+    const metaHost = { shadowRoot: mkShadow(), style: {} };
+    const doc = env.sandbox.document;
+    const origQS = doc.querySelector.bind(doc);
+    doc.querySelector = (sel) => {
+      if (sel === 'ytd-playlist-panel-renderer') return panelHost;
+      if (sel === 'ytd-watch-metadata') return metaHost;
+      return origQS(sel);
+    };
+    env.sandbox.window.__ytnfStyleBelow();
+    assert.strictEqual(env.sandbox.document.documentElement.attrs['data-ytnf-theme'], 'light',
+      'theme stamped for player.css');
+    assert.strictEqual(panelHost.style.background, 'rgba(255,255,255,.94)', 'queue card is light');
+    assert.strictEqual(metaHost.style.background, 'rgba(255,255,255,.94)', 'metadata card is light');
+    const metaCss = metaHost.shadowRoot.children[0];
+    assert.ok(metaCss && metaCss.textContent.includes('#0f0f0f'), 'description text re-pointed to dark ink');
+    const bg = env.sandbox.window.__ytnfBelowGlass;
+    assert.ok(bg.panel.includes('rgba(30,30,34'), 'dark classic variant unchanged');
+    assert.ok(bg.metadata.includes('rgba(255,255,255,.07)'), 'dark metadata variant unchanged');
+    const css = fs.readFileSync(__dirname + '/../player.css', 'utf8');
+    assert.ok(css.includes('html[data-ytnf-theme="light"] ytd-menu-popup-renderer'), 'menus have a light twin');
+    console.log('PASS 64 light mode: below-player cards follow the page theme');
+  }
+
+  console.log('ALL 62 TESTS PASS');
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });
